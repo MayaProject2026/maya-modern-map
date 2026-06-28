@@ -5,10 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Maya Modern Map</title>
 
-  <!-- Leaflet CSS -->
+  <!-- Leaflet core CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
         crossorigin="">
+
+  <!-- Leaflet.markercluster CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
 
   <style>
     html, body {
@@ -23,6 +27,7 @@
       height: 100vh;
     }
 
+    /* Loading overlay */
     .map-loading {
       position: absolute;
       top: 50%;
@@ -36,23 +41,81 @@
       color: #1a2340;
       box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
     }
+
+    /* Site count indicator in the top-left */
+    .site-counter {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 400;
+      background: rgba(255, 255, 255, 0.95);
+      padding: 0.6rem 1rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      color: #1a2340;
+      box-shadow: 0 1px 6px rgba(0, 0, 0, 0.12);
+      font-weight: 500;
+    }
+
+    .site-counter .count {
+      color: #2E5FA3;
+      font-weight: 700;
+    }
+
+    /* Popup styling */
+    .site-popup {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-width: 200px;
+    }
+
+    .site-popup .site-name {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #1a2340;
+      margin-bottom: 0.25rem;
+    }
+
+    .site-popup .site-location {
+      font-size: 0.85rem;
+      color: #666;
+      margin-bottom: 0.5rem;
+    }
+
+    .site-popup .site-rank {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: white;
+      background: #2E5FA3;
+    }
+
+    .site-popup .site-rank.rank-1 { background: #C0392B; }
+    .site-popup .site-rank.rank-2 { background: #E67E22; }
+    .site-popup .site-rank.rank-3 { background: #F1C40F; color: #1a2340; }
+    .site-popup .site-rank.rank-4 { background: #27AE60; }
+    .site-popup .site-rank.rank-5 { background: #7F8C8D; }
   </style>
 </head>
 <body>
 
   <div id="map"></div>
-  <div class="map-loading" id="loadingIndicator">Loading map...</div>
+  <div class="map-loading" id="loadingIndicator">Loading map and Maya sites...</div>
+  <div class="site-counter" id="siteCounter" style="display:none;">
+    <span class="count" id="siteCount">0</span> Maya sites
+  </div>
 
-  <!-- Leaflet JavaScript -->
+  <!-- Leaflet core JavaScript -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
           crossorigin=""></script>
 
+  <!-- Leaflet.markercluster plugin -->
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
   <script>
     // ── Initialise the map ─────────────────────────────────────────────────
-    // The Maya region spans roughly latitude 14 to 22 north,
-    // longitude -92 to -86 west. We centre on (16.5, -89.5) which sits
-    // in northern Guatemala, with a zoom level that shows the full region.
     const map = L.map('map', {
       center: [16.5, -89.5],
       zoom: 6,
@@ -61,27 +124,124 @@
       zoomControl: true,
     });
 
-    // ── Add the OpenStreetMap basemap as the default ───────────────────────
+    // ── Add the OpenStreetMap basemap ─────────────────────────────────────
     const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       maxZoom: 19,
     });
     osm.addTo(map);
 
-    // ── Hide the loading indicator once the map is ready ───────────────────
-    map.whenReady(() => {
-      const loading = document.getElementById('loadingIndicator');
-      if (loading) {
-        loading.style.transition = 'opacity 0.3s ease';
-        loading.style.opacity = '0';
-        setTimeout(() => loading.remove(), 300);
-      }
+    // ── Rank labels and colours ───────────────────────────────────────────
+    const RANK_LABELS = {
+      1: 'Major centre',
+      2: 'Important site',
+      3: 'Medium site',
+      4: 'Minor site',
+      5: 'Minimal remains',
+    };
+
+    const RANK_COLOURS = {
+      1: '#C0392B',
+      2: '#E67E22',
+      3: '#F1C40F',
+      4: '#27AE60',
+      5: '#7F8C8D',
+    };
+
+    // ── Build the popup HTML for a single site feature ────────────────────
+    function buildPopup(properties) {
+      const name = properties.name || 'Unnamed site';
+      const country = properties.country || '';
+      const state = properties.state || '';
+      const rank = properties.rank;
+      const rankLabel = RANK_LABELS[rank] || `Rank ${rank}`;
+
+      const locationParts = [country, state].filter(Boolean);
+      const locationLine = locationParts.length > 0
+        ? `<div class="site-location">${locationParts.join(' &middot; ')}</div>`
+        : '';
+
+      const rankBadge = rank
+        ? `<span class="site-rank rank-${rank}">${rankLabel}</span>`
+        : '';
+
+      return `
+        <div class="site-popup">
+          <div class="site-name">${name}</div>
+          ${locationLine}
+          ${rankBadge}
+        </div>
+      `;
+    }
+
+    // ── Create a small circular marker for each site ──────────────────────
+    function createMarker(feature, latlng) {
+      const rank = feature.properties.rank;
+      const colour = RANK_COLOURS[rank] || '#888888';
+
+      return L.circleMarker(latlng, {
+        radius: 5,
+        fillColor: colour,
+        color: '#ffffff',
+        weight: 1.2,
+        opacity: 1,
+        fillOpacity: 0.85,
+      });
+    }
+
+    // ── Create the cluster group ──────────────────────────────────────────
+    const markerCluster = L.markerClusterGroup({
+      disableClusteringAtZoom: 12,
+      spiderfyOnMaxZoom: false,
+      showCoverageOnHover: false,
+      chunkedLoading: true,
     });
 
-    // Log to console for development verification
+    // ── Fetch the GeoJSON and add sites to the map ────────────────────────
+    fetch('data/maya_sites.geojson')
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`Failed to load GeoJSON: ${response.status}`);
+        }
+        return response.json();
+      })
+      .then(geojson => {
+        const featureLayer = L.geoJSON(geojson, {
+          pointToLayer: createMarker,
+          onEachFeature: (feature, layer) => {
+            layer.bindPopup(buildPopup(feature.properties));
+          },
+        });
+
+        markerCluster.addLayer(featureLayer);
+        map.addLayer(markerCluster);
+
+        // Update the site counter
+        const count = geojson.features.length;
+        document.getElementById('siteCount').textContent = count.toLocaleString();
+        document.getElementById('siteCounter').style.display = 'block';
+
+        console.log(`Loaded ${count} Maya sites`);
+
+        // Hide loading indicator
+        const loading = document.getElementById('loadingIndicator');
+        if (loading) {
+          loading.style.transition = 'opacity 0.3s ease';
+          loading.style.opacity = '0';
+          setTimeout(() => loading.remove(), 300);
+        }
+      })
+      .catch(error => {
+        console.error('Error loading Maya sites:', error);
+        const loading = document.getElementById('loadingIndicator');
+        if (loading) {
+          loading.textContent = 'Error loading site data. Please try refreshing.';
+          loading.style.background = 'rgba(255, 230, 230, 0.95)';
+          loading.style.color = '#c0392b';
+        }
+      });
+
     console.log('Maya Modern Map initialised');
-    console.log('Centre:', map.getCenter());
-    console.log('Zoom:', map.getZoom());
   </script>
 </body>
 </html>
