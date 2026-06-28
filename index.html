@@ -2,47 +2,86 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Maya Modern Map</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin="">
+
   <style>
-    body {
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      max-width: 720px;
-      margin: 4rem auto;
-      padding: 0 2rem;
+    }
+
+    #map {
+      width: 100%;
+      height: 100vh;
+    }
+
+    .map-loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 500;
+      background: rgba(255, 255, 255, 0.95);
+      padding: 1rem 1.5rem;
+      border-radius: 8px;
+      font-size: 0.95rem;
       color: #1a2340;
-      line-height: 1.6;
-    }
-    h1 { color: #2E5FA3; margin-bottom: 0.25rem; }
-    .subtitle { color: #888; margin-top: 0; }
-    .status {
-      background: #FDF5E6;
-      border-left: 4px solid #F5A623;
-      padding: 1rem 1.25rem;
-      margin: 2rem 0;
-      border-radius: 4px;
-    }
-    a { color: #2E5FA3; }
-    code {
-      background: #f4f4f4;
-      padding: 0.1rem 0.4rem;
-      border-radius: 3px;
-      font-size: 0.95em;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
     }
   </style>
 </head>
 <body>
-  <h1>Maya Modern Map</h1>
-  <p class="subtitle">A modernised reimplementation of mayamap.org</p>
 
-  <div class="status">
-    <strong>Status:</strong> Project under active development. The interactive map will appear here once implementation is complete.
-  </div>
+  <div id="map"></div>
+  <div class="map-loading" id="loadingIndicator">Loading map...</div>
 
-  <p>This site hosts the working artifact for an MSc Data Science dissertation at the University of St Andrews (CS5999), supervised by Professor Lars Kotthoff.</p>
+  <!-- Leaflet JavaScript -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+          crossorigin=""></script>
 
-  <p>The project modernises the existing <a href="http://mayamap.org">mayamap.org</a> interactive web map of Maya archaeological sites by replacing its OpenLayers 2 / server-side raster tile architecture with a fully client-side implementation using Leaflet.js and GeoJSON.</p>
+  <script>
+    // ── Initialise the map ─────────────────────────────────────────────────
+    // The Maya region spans roughly latitude 14 to 22 north,
+    // longitude -92 to -86 west. We centre on (16.5, -89.5) which sits
+    // in northern Guatemala, with a zoom level that shows the full region.
+    const map = L.map('map', {
+      center: [16.5, -89.5],
+      zoom: 6,
+      minZoom: 3,
+      maxZoom: 18,
+      zoomControl: true,
+    });
 
-  <p>Source code and progress: <a href="https://github.com/MayaProject2026/maya-modern-map">github.com/MayaProject2026/maya-modern-map</a></p>
+    // ── Add the OpenStreetMap basemap as the default ───────────────────────
+    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19,
+    });
+    osm.addTo(map);
+
+    // ── Hide the loading indicator once the map is ready ───────────────────
+    map.whenReady(() => {
+      const loading = document.getElementById('loadingIndicator');
+      if (loading) {
+        loading.style.transition = 'opacity 0.3s ease';
+        loading.style.opacity = '0';
+        setTimeout(() => loading.remove(), 300);
+      }
+    });
+
+    // Log to console for development verification
+    console.log('Maya Modern Map initialised');
+    console.log('Centre:', map.getCenter());
+    console.log('Zoom:', map.getZoom());
+  </script>
 </body>
 </html>
