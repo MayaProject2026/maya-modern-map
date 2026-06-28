@@ -4,6 +4,15 @@ A log of significant changes and progress on the Maya Modern Map project.
 
 ## 2026-06-28
 
+### Core map implementation
+
+- Replaced the placeholder index.html with a working Leaflet.js implementation
+- Map loads Leaflet v1.9.4 from the unpkg CDN with subresource integrity checks
+- Default view centred on the Maya region at coordinates (16.5, -89.5), zoom level 6
+- OpenStreetMap configured as the default basemap
+- Mobile viewport meta tag added to support touch interaction
+- Full-viewport responsive layout with loading indicator
+
 ### Foundation and infrastructure
 
 - Created GitHub repository at github.com/MayaProject2026/maya-modern-map
@@ -11,7 +20,6 @@ A log of significant changes and progress on the Maya Modern Map project.
 - Set up project README with full description, technology stack, and architecture overview
 - Enabled GitHub Pages deployment from the main branch
 - Live site now available at https://mayaproject2026.github.io/maya-modern-map/
-- Added starter index.html placeholder page
 
 ### Repository structure
 
