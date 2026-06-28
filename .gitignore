@@ -216,3 +216,39 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ─────────────────────────────────────────────
+# Project-specific ignores
+# ─────────────────────────────────────────────
+
+# Raw EAAMS shapefile data (not redistributed)
+data/raw/
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+*.qpj
+*.sbn
+*.sbx
+
+# Local development files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Python virtual environments
+venv/
+.venv/
+env/
+.env
+
+# Log files
+*.log
+
+# Editor backup files
+*~
+*.bak
