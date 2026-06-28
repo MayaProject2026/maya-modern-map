@@ -15,93 +15,202 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
 
   <style>
+    /* ---------- Design tokens ---------- */
+    :root {
+      --gold: #e2b96f;
+      --gold-soft: #f3d699;
+      --panel-bg: #ffffff;
+      --chip-bg: #eeeeee;
+      --chip-bg-hover: #e5e5e5;
+      --text: #1a1a1a;
+      --muted: #6b7280;
+      --muted-2: #9ca3af;
+      --popup-bg: #16213e;
+      --map-bg: #0e1424;
+    }
+
+    * { box-sizing: border-box; }
+
     html, body {
       height: 100%;
       margin: 0;
       padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    }
-
-    #map {
       width: 100%;
-      height: 100vh;
+      background: var(--map-bg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+      overflow: hidden;
     }
 
-    /* Loading overlay */
+    /* ---------- Map fills viewport ---------- */
+    #map {
+      position: absolute;
+      inset: 0;
+      height: 100%;
+      width: 100%;
+      background: var(--map-bg);
+    }
+
+    .leaflet-container {
+      background: var(--map-bg);
+      font-family: inherit;
+    }
+
+    /* ---------- Loading indicator ---------- */
     .map-loading {
       position: absolute;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
       z-index: 500;
-      background: rgba(255, 255, 255, 0.95);
+      background: var(--panel-bg);
       padding: 1rem 1.5rem;
-      border-radius: 8px;
-      font-size: 0.95rem;
-      color: #1a2340;
-      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+      border-radius: 12px;
+      font-size: 13px;
+      color: var(--text);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+      font-weight: 500;
+      letter-spacing: 0.2px;
     }
 
-    /* Site count indicator in the top-left */
+    /* ---------- Site counter (temporary, will be replaced by panel later) ---------- */
     .site-counter {
       position: absolute;
-      top: 12px;
-      left: 12px;
+      top: 16px;
+      left: 16px;
       z-index: 400;
-      background: rgba(255, 255, 255, 0.95);
-      padding: 0.6rem 1rem;
-      border-radius: 8px;
-      font-size: 0.9rem;
-      color: #1a2340;
-      box-shadow: 0 1px 6px rgba(0, 0, 0, 0.12);
+      background: var(--panel-bg);
+      padding: 12px 16px;
+      border-radius: 12px;
+      font-size: 13px;
+      color: var(--text);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
       font-weight: 500;
     }
-
     .site-counter .count {
-      color: #2E5FA3;
+      color: #b07d2a;
       font-weight: 700;
+      font-variant-numeric: tabular-nums;
     }
 
-    /* Popup styling */
-    .site-popup {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      min-width: 200px;
+    /* ---------- Leaflet zoom control restyled ---------- */
+    .leaflet-control-zoom {
+      border: none !important;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+      border-radius: 10px !important;
+      overflow: hidden;
     }
+    .leaflet-control-zoom a {
+      background: var(--panel-bg) !important;
+      color: var(--text) !important;
+      border: none !important;
+      border-bottom: 1px solid #eeeeee !important;
+      transition: background 0.15s ease;
+    }
+    .leaflet-control-zoom a:last-child { border-bottom: none !important; }
+    .leaflet-control-zoom a:hover { background: #f5f5f5 !important; }
+    .leaflet-bar { border: none !important; }
 
-    .site-popup .site-name {
-      font-size: 1.05rem;
+    /* ---------- Attribution restyled ---------- */
+    .leaflet-control-attribution {
+      background: rgba(255, 255, 255, 0.85) !important;
+      color: var(--muted) !important;
+      font-size: 10.5px;
+      border-radius: 6px;
+      margin: 0 8px 8px 0 !important;
+      padding: 2px 8px;
+    }
+    .leaflet-control-attribution a { color: var(--text) !important; }
+
+    /* ---------- Dark themed popups ---------- */
+    .leaflet-popup-content-wrapper {
+      background: var(--popup-bg) !important;
+      color: #e8ecf4 !important;
+      border-radius: 14px !important;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45) !important;
+      border: 1px solid rgba(226, 185, 111, 0.25);
+      padding: 4px;
+    }
+    .leaflet-popup-content {
+      margin: 14px 16px !important;
+      line-height: 1.5;
+      font-size: 13px;
+      min-width: 220px;
+    }
+    .leaflet-popup-tip {
+      background: var(--popup-bg) !important;
+      border: 1px solid rgba(226, 185, 111, 0.25);
+    }
+    .leaflet-popup-close-button {
+      color: #8a93a8 !important;
+      font-size: 20px !important;
+      padding: 8px 10px 0 0 !important;
+    }
+    .leaflet-popup-close-button:hover { color: var(--gold) !important; }
+
+    .popup-title {
+      color: var(--gold);
       font-weight: 700;
-      color: #1a2340;
-      margin-bottom: 0.25rem;
+      font-size: 15px;
+      margin: 0 0 4px 0;
     }
-
-    .site-popup .site-location {
-      font-size: 0.85rem;
-      color: #666;
-      margin-bottom: 0.5rem;
-    }
-
-    .site-popup .site-rank {
-      display: inline-block;
-      padding: 0.15rem 0.5rem;
-      border-radius: 4px;
-      font-size: 0.78rem;
+    .popup-sub {
+      color: #8a93a8;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1.1px;
+      margin-bottom: 8px;
       font-weight: 600;
-      color: white;
-      background: #2E5FA3;
+    }
+    .popup-sub .sep { margin: 0 6px; opacity: 0.45; }
+    .popup-rank {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(226, 185, 111, 0.18);
+      color: var(--gold);
+      border-radius: 999px;
+      padding: 3px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+    }
+    .popup-rank .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--gold);
     }
 
-    .site-popup .site-rank.rank-1 { background: #C0392B; }
-    .site-popup .site-rank.rank-2 { background: #E67E22; }
-    .site-popup .site-rank.rank-3 { background: #F1C40F; color: #1a2340; }
-    .site-popup .site-rank.rank-4 { background: #27AE60; }
-    .site-popup .site-rank.rank-5 { background: #7F8C8D; }
+    /* ---------- Override default marker cluster styling ---------- */
+    .marker-cluster-small,
+    .marker-cluster-medium,
+    .marker-cluster-large,
+    .marker-cluster-small div,
+    .marker-cluster-medium div,
+    .marker-cluster-large div {
+      background: transparent !important;
+    }
+    .marker-cluster {
+      background: rgba(226, 185, 111, 0.35);
+      border: 2px solid rgba(226, 185, 111, 0.8);
+      color: #1a1a1a;
+      font-weight: 700;
+      border-radius: 50%;
+    }
+    .marker-cluster div {
+      background: rgba(226, 185, 111, 0.6);
+      color: #1a1a1a;
+      font-weight: 700;
+    }
   </style>
 </head>
 <body>
 
   <div id="map"></div>
-  <div class="map-loading" id="loadingIndicator">Loading map and Maya sites...</div>
+  <div class="map-loading" id="loadingIndicator">Loading Maya sites...</div>
   <div class="site-counter" id="siteCounter" style="display:none;">
     <span class="count" id="siteCount">0</span> Maya sites
   </div>
@@ -131,7 +240,7 @@
     });
     osm.addTo(map);
 
-    // ── Rank labels and colours ───────────────────────────────────────────
+    // ── Rank labels (used in popups) ──────────────────────────────────────
     const RANK_LABELS = {
       1: 'Major centre',
       2: 'Important site',
@@ -140,52 +249,39 @@
       5: 'Minimal remains',
     };
 
-    const RANK_COLOURS = {
-      1: '#C0392B',
-      2: '#E67E22',
-      3: '#F1C40F',
-      4: '#27AE60',
-      5: '#7F8C8D',
-    };
-
-    // ── Build the popup HTML for a single site feature ────────────────────
+    // ── Build the popup HTML ──────────────────────────────────────────────
     function buildPopup(properties) {
       const name = properties.name || 'Unnamed site';
       const country = properties.country || '';
       const state = properties.state || '';
       const rank = properties.rank;
-      const rankLabel = RANK_LABELS[rank] || `Rank ${rank}`;
+      const rankLabel = RANK_LABELS[rank] || (rank ? `Rank ${rank}` : null);
 
-      const locationParts = [country, state].filter(Boolean);
-      const locationLine = locationParts.length > 0
-        ? `<div class="site-location">${locationParts.join(' &middot; ')}</div>`
+      const subParts = [country, state].filter(Boolean);
+      const subLine = subParts.length > 0
+        ? `<div class="popup-sub">${subParts.join('<span class="sep">·</span>')}</div>`
         : '';
 
-      const rankBadge = rank
-        ? `<span class="site-rank rank-${rank}">${rankLabel}</span>`
+      const rankBadge = rankLabel
+        ? `<div class="popup-rank"><span class="dot"></span>${rankLabel}</div>`
         : '';
 
       return `
-        <div class="site-popup">
-          <div class="site-name">${name}</div>
-          ${locationLine}
-          ${rankBadge}
-        </div>
+        <div class="popup-title">${name}</div>
+        ${subLine}
+        ${rankBadge}
       `;
     }
 
-    // ── Create a small circular marker for each site ──────────────────────
+    // ── Create a circular marker for each site (all gold for now) ─────────
     function createMarker(feature, latlng) {
-      const rank = feature.properties.rank;
-      const colour = RANK_COLOURS[rank] || '#888888';
-
       return L.circleMarker(latlng, {
         radius: 5,
-        fillColor: colour,
+        fillColor: '#e2b96f',
         color: '#ffffff',
         weight: 1.2,
         opacity: 1,
-        fillOpacity: 0.85,
+        fillOpacity: 0.9,
       });
     }
 
@@ -216,14 +312,12 @@
         markerCluster.addLayer(featureLayer);
         map.addLayer(markerCluster);
 
-        // Update the site counter
         const count = geojson.features.length;
         document.getElementById('siteCount').textContent = count.toLocaleString();
         document.getElementById('siteCounter').style.display = 'block';
 
         console.log(`Loaded ${count} Maya sites`);
 
-        // Hide loading indicator
         const loading = document.getElementById('loadingIndicator');
         if (loading) {
           loading.style.transition = 'opacity 0.3s ease';
@@ -236,7 +330,7 @@
         const loading = document.getElementById('loadingIndicator');
         if (loading) {
           loading.textContent = 'Error loading site data. Please try refreshing.';
-          loading.style.background = 'rgba(255, 230, 230, 0.95)';
+          loading.style.background = '#fce4e4';
           loading.style.color = '#c0392b';
         }
       });
