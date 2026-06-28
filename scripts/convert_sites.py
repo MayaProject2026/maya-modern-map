@@ -38,13 +38,13 @@ OUTPUT_GEOJSON = REPO_ROOT / "data" / "maya_sites.geojson"
 
 # ── Attribute mapping ──────────────────────────────────────────────────────
 # Maps shapefile attribute field names to the cleaner property names used in
-# the output GeoJSON. The shapefile's dBASE format restricts field names to
-# ten characters, hence the abbreviations.
+# the output GeoJSON. The EAAMS shapefile prefixes some fields with "BW"
+# (for Bruce Witschey) and uses inconsistent casing.
 FIELD_MAP = {
-    "NAME": "name",
-    "COUNTRY": "country",
-    "STATE": "state",
-    "RANK": "rank",
+    "BWNAME": "name",
+    "BWCOuntry": "country",
+    "BWState": "state",
+    "rank": "rank",
     "NOTES": "notes",
 }
 
@@ -52,7 +52,6 @@ FIELD_MAP = {
 def main() -> None:
     """Run the full conversion pipeline."""
 
-    # 1. Verify the input shapefile exists
     if not INPUT_SHAPEFILE.exists():
         print(f"ERROR: Input shapefile not found at {INPUT_SHAPEFILE}")
         print("Place the EAAMS shapefile (and companions) in data/raw/")
@@ -63,39 +62,30 @@ def main() -> None:
     print(f"  Loaded {len(gdf)} total records")
     print(f"  Coordinate reference system: {gdf.crs}")
 
-    # 2. Reproject to WGS84 if the shapefile is in a different CRS.
-    # RFC 7946 (GeoJSON) requires WGS84 with decimal-degree coordinates.
     if gdf.crs is None or gdf.crs.to_epsg() != 4326:
         print("  Reprojecting to WGS84 (EPSG:4326)...")
         gdf = gdf.to_crs(epsg=4326)
 
-    # 3. Filter out records with missing or empty site names. Unnamed sites
-    # are not useful for a user-facing browsable map.
     initial_count = len(gdf)
-    gdf = gdf[gdf["NAME"].notna() & (gdf["NAME"].astype(str).str.strip() != "")]
+    gdf = gdf[gdf["BWNAME"].notna() & (gdf["BWNAME"].astype(str).str.strip() != "")]
     print(f"  Filtered to {len(gdf)} named sites (removed {initial_count - len(gdf)} unnamed records)")
 
-    # 4. Build the GeoJSON FeatureCollection manually for full control over
-    # property names, ordering, and encoding.
     features = []
     for _, row in gdf.iterrows():
         properties = {}
         for shapefile_field, geojson_property in FIELD_MAP.items():
             value = row.get(shapefile_field)
-            # Convert NaN to None so the resulting JSON is clean
             if value is None or (isinstance(value, float) and value != value):
                 properties[geojson_property] = None
             else:
                 properties[geojson_property] = value
 
-        # Coerce rank to integer where possible for clean filtering downstream
         if properties.get("rank") is not None:
             try:
                 properties["rank"] = int(properties["rank"])
             except (ValueError, TypeError):
                 properties["rank"] = None
 
-        # Build the feature object with point geometry in [lng, lat] order
         feature = {
             "type": "Feature",
             "geometry": {
@@ -106,13 +96,11 @@ def main() -> None:
         }
         features.append(feature)
 
-    # 5. Wrap features in a FeatureCollection
     feature_collection = {
         "type": "FeatureCollection",
         "features": features,
     }
 
-    # 6. Write to disk with UTF-8 encoding (preserves non-ASCII site names)
     OUTPUT_GEOJSON.parent.mkdir(parents=True, exist_ok=True)
     with open(OUTPUT_GEOJSON, "w", encoding="utf-8") as f:
         json.dump(feature_collection, f, ensure_ascii=False, indent=2)
