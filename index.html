@@ -39,14 +39,12 @@
     #map { position: absolute; inset: 0; height: 100%; width: 100%; background: var(--map-bg); }
     .leaflet-container { background: var(--map-bg); font-family: inherit; }
 
-    /* ---------- Loading indicator ---------- */
     .map-loading {
       position: absolute; top: 50%; left: 50%;
       transform: translate(-50%, -50%);
       z-index: 500;
       background: var(--panel-bg);
-      padding: 1rem 1.5rem;
-      border-radius: 12px;
+      padding: 1rem 1.5rem; border-radius: 12px;
       font-size: 13px; color: var(--text);
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
       font-weight: 500;
@@ -82,7 +80,6 @@
     .search-row { display: flex; gap: 8px; align-items: stretch; }
     .search-row .search-wrap { flex: 1; }
     .search-wrap { position: relative; }
-
     .search-input {
       width: 100%;
       background: var(--chip-bg);
@@ -128,7 +125,6 @@
 
     /* ---------- Rank filter pills ---------- */
     .rank-filter { display: flex; gap: 5px; }
-
     .rank-pill {
       flex: 1;
       background: var(--chip-bg);
@@ -143,9 +139,63 @@
     .rank-pill:hover { background: var(--chip-bg-hover); }
     .rank-pill.active { background: var(--gold); color: #1a1a1a; }
 
-    .panel-placeholder {
-      font-size: 12px; color: var(--muted-2);
-      font-style: italic; padding: 8px 4px; text-align: center;
+    /* ---------- Site list ---------- */
+    .site-list-wrap { overflow: hidden; }
+
+    .site-list {
+      max-height: 280px;
+      overflow-y: auto;
+      margin: 0;
+      padding: 0 2px 0 0;
+      list-style: none;
+      scrollbar-width: thin;
+      scrollbar-color: #d1d5db transparent;
+    }
+
+    .site-list::-webkit-scrollbar { width: 6px; }
+    .site-list::-webkit-scrollbar-track { background: transparent; }
+    .site-list::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 8px; }
+    .site-list::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+
+    .site-item {
+      padding: 8px 12px;
+      margin: 2px 0;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      user-select: none;
+    }
+
+    .site-item:hover { background: var(--chip-bg); }
+
+    .site-item.active {
+      background: var(--gold);
+      color: var(--text);
+    }
+    .site-item.active .site-meta { color: rgba(26, 26, 26, 0.72); }
+
+    .site-name {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      line-height: 1.25;
+    }
+
+    .site-meta {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.2;
+    }
+
+    .empty {
+      padding: 16px 12px;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+      font-style: italic;
     }
 
     /* ---------- Leaflet zoom control ---------- */
@@ -240,7 +290,6 @@
 
     .layers-wrap { position: relative; display: flex; }
 
-    /* ---------- Basemap popover ---------- */
     .basemap-popover {
       position: absolute; right: 0;
       bottom: calc(100% + 8px);
@@ -323,7 +372,9 @@
       <button class="rank-pill" type="button" data-rank="4">Minor</button>
     </div>
 
-    <div class="panel-placeholder">Site list coming next</div>
+    <div class="site-list-wrap">
+      <ul class="site-list" id="siteList"></ul>
+    </div>
   </div>
 
   <!-- Bottom-right control stack -->
@@ -480,6 +531,7 @@
     let currentFiltered = [];
     let searchQuery = "";
     let activeRankMax = Infinity;
+    let activeIdx = null;
     const markerByIndex = new Map();
 
     const markerCluster = L.markerClusterGroup({
@@ -499,6 +551,8 @@
         weight: 1.2, opacity: 1, fillOpacity: 0.9,
       });
       marker.bindPopup(buildPopup(feature.properties));
+      // When the marker popup opens, mark the corresponding list item active
+      marker.on('popupopen', () => setActiveByIdx(index, { skipMapZoom: true }));
       markerByIndex.set(index, marker);
       return marker;
     }
@@ -530,6 +584,7 @@
       });
       markerCluster.addLayers(visibleMarkers);
 
+      renderList();
       updateCountLabel();
     }
 
@@ -552,6 +607,55 @@
       }
     }
 
+    // ── Site list ─────────────────────────────────────────────────────────
+    const listEl = document.getElementById('siteList');
+
+    function renderList() {
+      listEl.innerHTML = '';
+      if (currentFiltered.length === 0) {
+        const empty = document.createElement('li');
+        empty.className = 'empty';
+        empty.textContent = 'No sites match your filters.';
+        listEl.appendChild(empty);
+        return;
+      }
+      currentFiltered.forEach((feature) => {
+        const p = feature.properties || {};
+        const item = document.createElement('li');
+        item.className = 'site-item' + (activeIdx === feature._idx ? ' active' : '');
+        item.dataset.idx = feature._idx;
+        const country = p.country || '';
+        const state = p.state || '';
+        const meta = [country, state].filter(Boolean).join(' · ');
+        item.innerHTML = `
+          <span class="site-name">${p.name || 'Unnamed site'}</span>
+          <span class="site-meta">${meta}</span>
+        `;
+        item.addEventListener('click', () => setActiveByIdx(feature._idx));
+        listEl.appendChild(item);
+      });
+    }
+
+    function setActiveByIdx(idx, opts = {}) {
+      activeIdx = idx;
+      // Update list highlight
+      listEl.querySelectorAll('.site-item').forEach((el) => {
+        el.classList.toggle('active', parseInt(el.dataset.idx, 10) === idx);
+      });
+      // Scroll active item into view
+      const activeEl = listEl.querySelector('.site-item.active');
+      if (activeEl) activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      // Zoom map and open popup
+      const marker = markerByIndex.get(idx);
+      if (marker && !opts.skipMapZoom) {
+        const latlng = marker.getLatLng();
+        markerCluster.zoomToShowLayer(marker, () => {
+          marker.openPopup();
+        });
+        map.flyTo(latlng, Math.max(map.getZoom(), 10), { duration: 0.8 });
+      }
+    }
+
     // ── Search input ──────────────────────────────────────────────────────
     const searchEl = document.getElementById('search');
     searchEl.addEventListener('input', () => {
@@ -564,7 +668,6 @@
     rankPills.forEach((pill) => {
       pill.addEventListener('click', () => {
         const r = parseInt(pill.dataset.rank, 10);
-        // Toggle off if already active
         if (activeRankMax === r) {
           activeRankMax = Infinity;
           rankPills.forEach((p) => p.classList.remove('active'));
@@ -591,7 +694,14 @@
         return response.json();
       })
       .then(geojson => {
-        allSites = geojson.features.map((f, i) => { f._idx = i; return f; });
+        // Sort alphabetically by name so the list is browsable
+        const features = geojson.features.slice();
+        features.sort((a, b) => {
+          const an = (a.properties && a.properties.name) || '';
+          const bn = (b.properties && b.properties.name) || '';
+          return an.localeCompare(bn, 'en', { sensitivity: 'base' });
+        });
+        allSites = features.map((f, i) => { f._idx = i; return f; });
 
         const allMarkers = [];
         allSites.forEach((feature) => {
@@ -601,6 +711,7 @@
         markerCluster.addLayers(allMarkers);
 
         currentFiltered = allSites.slice();
+        renderList();
         updateCountLabel();
 
         const loading = document.getElementById('loadingIndicator');
