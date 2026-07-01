@@ -38,6 +38,7 @@
 
     #map { position: absolute; inset: 0; height: 100%; width: 100%; background: var(--map-bg); }
     .leaflet-container { background: var(--map-bg); font-family: inherit; }
+    .leaflet-container.radius-active { cursor: crosshair; }
 
     .map-loading {
       position: absolute; top: 50%; left: 50%;
@@ -115,6 +116,46 @@
     .radius-btn:hover { background: var(--chip-bg-hover); }
     .radius-btn.active { background: var(--gold); color: #1a1a1a; }
 
+    /* ---------- Radius control ---------- */
+    .radius-control {
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      background: var(--chip-bg);
+      border-radius: 12px;
+      padding: 12px;
+    }
+    .radius-control.open { display: flex; }
+    .radius-control .rc-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 12px;
+      color: var(--text);
+      font-weight: 500;
+    }
+    .radius-control .rc-km {
+      color: #b07d2a;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+    }
+    .radius-control input[type="range"] {
+      width: 100%;
+      accent-color: var(--gold);
+      cursor: pointer;
+    }
+    .radius-control .rc-readout {
+      font-size: 12px;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .radius-control .rc-readout strong { color: #1a1a1a; }
+    .radius-control .rc-hint {
+      font-size: 11px;
+      color: var(--muted-2);
+      font-style: italic;
+    }
+
     .count-label {
       font-size: 11.5px; color: var(--muted-2);
       padding: 0 4px;
@@ -174,54 +215,39 @@
       font-style: italic;
     }
 
-    /* ---------- View toggle pills (floating, bottom-left) ---------- */
+    /* ---------- View toggle pills ---------- */
     .view-toggle {
       position: absolute;
-      bottom: 30px;
-      left: 16px;
+      bottom: 30px; left: 16px;
       z-index: 1000;
-      display: flex;
-      gap: 6px;
+      display: flex; gap: 6px;
     }
-
     .view-pill {
       background: #ffffff;
       color: #1a1a1a;
       border: none;
       border-radius: 10px;
       padding: 6px 12px;
-      font-size: 12.5px;
-      font-weight: 500;
+      font-size: 12.5px; font-weight: 500;
       cursor: pointer;
       font-family: inherit;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
       transition: background 0.18s ease, color 0.18s ease, transform 0.15s ease;
       white-space: nowrap;
     }
-    .view-pill:hover {
-      background: #f5f5f5;
-      transform: translateY(-1px);
-    }
-    .view-pill.active {
-      background: var(--gold);
-      color: #1a1a1a;
-    }
+    .view-pill:hover { background: #f5f5f5; transform: translateY(-1px); }
+    .view-pill.active { background: var(--gold); color: #1a1a1a; }
     .view-pill.active:hover { background: var(--gold); }
 
-    /* ---------- Bubble cluster (used in Bubbles view) ---------- */
-    .bubble-cluster-wrap {
-      background: transparent !important;
-      border: none !important;
-    }
+    /* ---------- Bubble cluster ---------- */
+    .bubble-cluster-wrap { background: transparent !important; border: none !important; }
     .bubble-cluster {
       background: rgba(220, 80, 60, 0.5);
       border: 2px solid rgba(220, 80, 60, 0.9);
       color: #ffffff;
       font-weight: 700;
       border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      display: flex; align-items: center; justify-content: center;
       font-size: 13px;
       text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
       transition: transform 0.15s ease, box-shadow 0.15s ease;
@@ -406,6 +432,16 @@
       <button class="rank-pill" type="button" data-rank="4">Minor</button>
     </div>
 
+    <div class="radius-control" id="radiusControl">
+      <div class="rc-top">
+        <span>Radius</span>
+        <span class="rc-km" id="rcKm">50 km</span>
+      </div>
+      <input type="range" id="rcSlider" min="10" max="500" step="5" value="50">
+      <div class="rc-readout" id="rcReadout"><strong>0</strong> sites within 50 km</div>
+      <div class="rc-hint" id="rcHint">Click anywhere on the map to set a centre.</div>
+    </div>
+
     <div class="site-list-wrap">
       <ul class="site-list" id="siteList"></ul>
     </div>
@@ -526,6 +562,7 @@
     // ── Find my location ──────────────────────────────────────────────────
     const locateBtn = document.getElementById("locateBtn");
     let locationMarker = null;
+    let userLatLng = null;
 
     locateBtn.addEventListener("click", () => {
       if (!navigator.geolocation) { alert("Your browser does not support geolocation."); return; }
@@ -534,6 +571,7 @@
     });
     map.on("locationfound", (e) => {
       locateBtn.classList.remove("loading");
+      userLatLng = e.latlng;
       if (locationMarker) map.removeLayer(locationMarker);
       const icon = L.divIcon({
         className: "user-loc-icon",
@@ -549,7 +587,7 @@
       alert("Unable to find your location. Please allow location access in your browser.");
     });
 
-    // ── Rank labels ───────────────────────────────────────────────────────
+    // ── Rank labels + popups ──────────────────────────────────────────────
     const RANK_LABELS = {
       1: 'Major centre', 2: 'Important site', 3: 'Medium site', 4: 'Minor site', 5: 'Minimal remains',
     };
@@ -576,18 +614,20 @@
     let activeIdx = null;
     let currentView = "points";
 
-    const pointMarkerByIdx = new Map();   // Maps used in Points mode
-    const bubbleMarkerByIdx = new Map();  // Maps used in Bubbles mode
+    // Radius state
+    let radiusToolActive = false;
+    let radiusFilter = null;  // { lat, lng, km } when active
+    let radiusCircle = null;
 
-    // Points cluster (Points mode)
+    const pointMarkerByIdx = new Map();
+    const bubbleMarkerByIdx = new Map();
+
     const pointsCluster = L.markerClusterGroup({
       disableClusteringAtZoom: 12,
       spiderfyOnMaxZoom: false,
       showCoverageOnHover: false,
       chunkedLoading: true,
     });
-
-    // Bubbles cluster: shows count in red bubble at low zoom, individual bubbles at high zoom
     const bubblesCluster = L.markerClusterGroup({
       maxClusterRadius: 60,
       spiderfyOnMaxZoom: false,
@@ -603,12 +643,9 @@
         });
       }
     });
-
-    // Heat layer (Heat mode)
     let heatLayer = null;
 
     function bubbleRadiusFor(rank) {
-      // Major centres are largest, minor sites smallest
       if (rank === 1) return 18;
       if (rank === 2) return 12;
       if (rank === 3) return 9;
@@ -619,9 +656,7 @@
     function makePointMarker(feature, index) {
       const [lng, lat] = feature.geometry.coordinates;
       const marker = L.circleMarker([lat, lng], {
-        radius: 5,
-        fillColor: '#e2b96f',
-        color: '#ffffff',
+        radius: 5, fillColor: '#e2b96f', color: '#ffffff',
         weight: 1.2, opacity: 1, fillOpacity: 0.9,
       });
       marker.bindPopup(buildPopup(feature.properties));
@@ -635,15 +670,24 @@
       const rank = feature.properties && feature.properties.rank;
       const r = bubbleRadiusFor(rank);
       const marker = L.circleMarker([lat, lng], {
-        radius: r,
-        fillColor: '#dc503c',
-        color: '#ffffff',
+        radius: r, fillColor: '#dc503c', color: '#ffffff',
         weight: 1.5, opacity: 1, fillOpacity: 0.55,
       });
       marker.bindPopup(buildPopup(feature.properties));
       marker.on('popupopen', () => setActiveByIdx(index, { skipMapZoom: true }));
       bubbleMarkerByIdx.set(index, marker);
       return marker;
+    }
+
+    // ── Haversine great-circle distance (km) ──────────────────────────────
+    function haversineKm(lat1, lng1, lat2, lng2) {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLng = (lng2 - lng1) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) *
+        Math.sin(dLng/2) * Math.sin(dLng/2);
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     }
 
     function matchesQuery(feature, q) {
@@ -659,6 +703,10 @@
       if (!matchesQuery(feature, searchQuery)) return false;
       const rank = feature.properties && feature.properties.rank;
       if (typeof rank === 'number' && rank > activeRankMax) return false;
+      if (radiusFilter) {
+        const [lng, lat] = feature.geometry.coordinates;
+        if (haversineKm(radiusFilter.lat, radiusFilter.lng, lat, lng) > radiusFilter.km) return false;
+      }
       return true;
     }
 
@@ -697,15 +745,10 @@
           heatLayer.setLatLngs(heatPoints);
         } else {
           heatLayer = L.heatLayer(heatPoints, {
-            radius: 22,
-            blur: 18,
-            maxZoom: 10,
+            radius: 22, blur: 18, maxZoom: 10,
             gradient: {
-              0.2: "#3288bd",
-              0.4: "#99d594",
-              0.6: "#fee08b",
-              0.8: "#fc8d59",
-              1.0: "#d53e4f"
+              0.2: "#3288bd", 0.4: "#99d594", 0.6: "#fee08b",
+              0.8: "#fc8d59", 1.0: "#d53e4f"
             }
           });
         }
@@ -728,13 +771,17 @@
       rebuildCurrentViewLayer();
       renderList();
       updateCountLabel();
+      if (radiusFilter) updateRadiusReadout();
     }
 
     function updateCountLabel() {
       const n = currentFiltered.length;
       const fmt = n.toLocaleString('en-US');
       const el = document.getElementById('countLabel');
-
+      if (radiusFilter) {
+        el.textContent = `${fmt} site${n === 1 ? '' : 's'} within ${radiusFilter.km} km`;
+        return;
+      }
       if (!searchQuery && activeRankMax === Infinity) {
         el.textContent = `${fmt} site${n === 1 ? '' : 's'}`;
       } else if (!searchQuery) {
@@ -757,7 +804,9 @@
       if (currentFiltered.length === 0) {
         const empty = document.createElement('li');
         empty.className = 'empty';
-        empty.textContent = 'No sites match your filters.';
+        empty.textContent = radiusFilter
+          ? 'No sites within this radius.'
+          : 'No sites match your filters.';
         listEl.appendChild(empty);
         return;
       }
@@ -786,7 +835,6 @@
       const activeEl = listEl.querySelector('.site-item.active');
       if (activeEl) activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 
-      // Open popup on the correct layer for the current view
       let marker = null;
       if (currentView === "points") marker = pointMarkerByIdx.get(idx);
       else if (currentView === "bubbles") marker = bubbleMarkerByIdx.get(idx);
@@ -797,13 +845,10 @@
           map.flyTo(latlng, Math.max(map.getZoom(), 10), { duration: 0.8 });
         } else {
           const cluster = (currentView === "points") ? pointsCluster : bubblesCluster;
-          cluster.zoomToShowLayer(marker, () => {
-            marker.openPopup();
-          });
+          cluster.zoomToShowLayer(marker, () => marker.openPopup());
           map.flyTo(latlng, Math.max(map.getZoom(), 10), { duration: 0.8 });
         }
       } else if (currentView === "heat" && !opts.skipMapZoom) {
-        // In heat mode, the feature has no individual marker — just fly there
         const feature = allSites.find((f) => f._idx === idx);
         if (feature) {
           const [lng, lat] = feature.geometry.coordinates;
@@ -837,15 +882,79 @@
       });
     });
 
-    // ── Radius button placeholder ─────────────────────────────────────────
-    const radiusBtn = document.getElementById('radiusBtn');
-    radiusBtn.addEventListener('click', () => {
-      radiusBtn.classList.toggle('active');
-    });
-
     // ── View toggle ───────────────────────────────────────────────────────
     document.querySelectorAll('.view-pill').forEach((b) => {
       b.addEventListener('click', () => setView(b.dataset.view));
+    });
+
+    // ── Radius tool ───────────────────────────────────────────────────────
+    const radiusBtn = document.getElementById('radiusBtn');
+    const radiusControl = document.getElementById('radiusControl');
+    const rcSlider = document.getElementById('rcSlider');
+    const rcKm = document.getElementById('rcKm');
+    const rcReadout = document.getElementById('rcReadout');
+    const rcHint = document.getElementById('rcHint');
+
+    function updateRadiusReadout() {
+      if (!radiusFilter) return;
+      const n = currentFiltered.length;
+      rcReadout.innerHTML = `<strong>${n.toLocaleString()}</strong> site${n === 1 ? '' : 's'} within ${radiusFilter.km} km`;
+    }
+
+    function setRadiusToolActive(on) {
+      radiusToolActive = on;
+      radiusBtn.classList.toggle('active', on);
+      radiusControl.classList.toggle('open', on);
+      const c = map.getContainer();
+      c.classList.toggle('radius-active', on);
+
+      if (!on) {
+        if (radiusCircle) { map.removeLayer(radiusCircle); radiusCircle = null; }
+        radiusFilter = null;
+        applyFilters();
+      } else {
+        rcHint.style.display = 'block';
+        rcReadout.innerHTML = `<strong>0</strong> sites — click the map to begin`;
+      }
+    }
+
+    radiusBtn.addEventListener('click', () => setRadiusToolActive(!radiusToolActive));
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && radiusToolActive) setRadiusToolActive(false);
+    });
+
+    function drawRadius(latlng) {
+      const km = parseInt(rcSlider.value, 10);
+      if (radiusCircle) {
+        radiusCircle.setLatLng(latlng);
+        radiusCircle.setRadius(km * 1000);
+      } else {
+        radiusCircle = L.circle(latlng, {
+          radius: km * 1000,
+          color: '#dc3c3c',
+          weight: 2,
+          fill: false
+        }).addTo(map);
+      }
+      radiusFilter = { lat: latlng.lat, lng: latlng.lng, km };
+      rcHint.style.display = 'none';
+      applyFilters();
+    }
+
+    map.on('click', (e) => {
+      if (!radiusToolActive) return;
+      drawRadius(e.latlng);
+    });
+
+    rcSlider.addEventListener('input', () => {
+      const km = parseInt(rcSlider.value, 10);
+      rcKm.textContent = km + ' km';
+      if (radiusCircle && radiusFilter) {
+        radiusCircle.setRadius(km * 1000);
+        radiusFilter.km = km;
+        applyFilters();
+      }
     });
 
     // ── Load GeoJSON and build markers ────────────────────────────────────
@@ -863,7 +972,6 @@
         });
         allSites = features.map((f, i) => { f._idx = i; return f; });
 
-        // Build both marker sets (points and bubbles) once
         const pointMarkers = [];
         const bubbleMarkers = [];
         allSites.forEach((feature) => {
@@ -874,8 +982,6 @@
         bubblesCluster.addLayers(bubbleMarkers);
 
         currentFiltered = allSites.slice();
-
-        // Start in Points mode
         map.addLayer(pointsCluster);
 
         renderList();
