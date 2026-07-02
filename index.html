@@ -65,17 +65,38 @@
       display: flex; flex-direction: column;
       gap: 10px;
     }
+
+    .panel.dragging {
+      transition: none;
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.25);
+    }
+
+    /* Drag handle */
     .panel-header {
-      height: 14px; user-select: none;
-      margin: -6px -4px 2px; border-radius: 10px;
+      height: 14px;
+      cursor: grab;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+      margin: -6px -4px 2px;
+      border-radius: 10px;
       position: relative;
+      transition: background 0.15s ease;
     }
     .panel-header::before {
-      content: ""; position: absolute;
-      top: 4px; left: 50%; transform: translateX(-50%);
+      content: "";
+      position: absolute;
+      top: 4px; left: 50%;
+      transform: translateX(-50%);
       width: 36px; height: 4px;
-      border-radius: 4px; background: #d1d5db;
+      border-radius: 4px;
+      background: #d1d5db;
+      transition: background 0.15s ease;
     }
+    .panel-header:hover::before { background: #b0b5c0; }
+    .panel.dragging .panel-header,
+    .panel-header:active { cursor: grabbing; }
+    .panel.dragging .panel-header::before { background: var(--gold); }
 
     /* ---------- Search row ---------- */
     .search-row { display: flex; gap: 8px; align-items: stretch; }
@@ -127,12 +148,8 @@
     }
     .radius-control.open { display: flex; }
     .radius-control .rc-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      font-size: 12px;
-      color: var(--text);
-      font-weight: 500;
+      display: flex; justify-content: space-between; align-items: baseline;
+      font-size: 12px; color: var(--text); font-weight: 500;
     }
     .radius-control .rc-km {
       color: #b07d2a;
@@ -140,20 +157,15 @@
       font-weight: 700;
     }
     .radius-control input[type="range"] {
-      width: 100%;
-      accent-color: var(--gold);
-      cursor: pointer;
+      width: 100%; accent-color: var(--gold); cursor: pointer;
     }
     .radius-control .rc-readout {
-      font-size: 12px;
-      color: var(--muted);
+      font-size: 12px; color: var(--muted);
       font-variant-numeric: tabular-nums;
     }
     .radius-control .rc-readout strong { color: #1a1a1a; }
     .radius-control .rc-hint {
-      font-size: 11px;
-      color: var(--muted-2);
-      font-style: italic;
+      font-size: 11px; color: var(--muted-2); font-style: italic;
     }
 
     .count-label {
@@ -208,11 +220,8 @@
     .site-name { font-size: 13px; font-weight: 500; color: var(--text); line-height: 1.25; }
     .site-meta { font-size: 11px; color: var(--muted); line-height: 1.2; }
     .empty {
-      padding: 16px 12px;
-      color: var(--muted);
-      font-size: 13px;
-      text-align: center;
-      font-style: italic;
+      padding: 16px 12px; color: var(--muted);
+      font-size: 13px; text-align: center; font-style: italic;
     }
 
     /* ---------- View toggle pills ---------- */
@@ -225,12 +234,10 @@
     .view-pill {
       background: #ffffff;
       color: #1a1a1a;
-      border: none;
-      border-radius: 10px;
+      border: none; border-radius: 10px;
       padding: 6px 12px;
       font-size: 12.5px; font-weight: 500;
-      cursor: pointer;
-      font-family: inherit;
+      cursor: pointer; font-family: inherit;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
       transition: background 0.18s ease, color 0.18s ease, transform 0.15s ease;
       white-space: nowrap;
@@ -410,7 +417,7 @@
 
   <!-- Floating panel (top-left) -->
   <div class="panel" id="panel">
-    <div class="panel-header" aria-label="Panel"></div>
+    <div class="panel-header" aria-label="Drag to move"></div>
 
     <div class="search-row">
       <div class="search-wrap">
@@ -562,7 +569,6 @@
     // ── Find my location ──────────────────────────────────────────────────
     const locateBtn = document.getElementById("locateBtn");
     let locationMarker = null;
-    let userLatLng = null;
 
     locateBtn.addEventListener("click", () => {
       if (!navigator.geolocation) { alert("Your browser does not support geolocation."); return; }
@@ -571,7 +577,6 @@
     });
     map.on("locationfound", (e) => {
       locateBtn.classList.remove("loading");
-      userLatLng = e.latlng;
       if (locationMarker) map.removeLayer(locationMarker);
       const icon = L.divIcon({
         className: "user-loc-icon",
@@ -613,10 +618,8 @@
     let activeRankMax = Infinity;
     let activeIdx = null;
     let currentView = "points";
-
-    // Radius state
     let radiusToolActive = false;
-    let radiusFilter = null;  // { lat, lng, km } when active
+    let radiusFilter = null;
     let radiusCircle = null;
 
     const pointMarkerByIdx = new Map();
@@ -679,7 +682,6 @@
       return marker;
     }
 
-    // ── Haversine great-circle distance (km) ──────────────────────────────
     function haversineKm(lat1, lng1, lat2, lng2) {
       const R = 6371;
       const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -746,10 +748,7 @@
         } else {
           heatLayer = L.heatLayer(heatPoints, {
             radius: 22, blur: 18, maxZoom: 10,
-            gradient: {
-              0.2: "#3288bd", 0.4: "#99d594", 0.6: "#fee08b",
-              0.8: "#fc8d59", 1.0: "#d53e4f"
-            }
+            gradient: { 0.2: "#3288bd", 0.4: "#99d594", 0.6: "#fee08b", 0.8: "#fc8d59", 1.0: "#d53e4f" }
           });
         }
         if (!map.hasLayer(heatLayer)) map.addLayer(heatLayer);
@@ -857,14 +856,13 @@
       }
     }
 
-    // ── Search input ──────────────────────────────────────────────────────
+    // ── Search / rank / view ──────────────────────────────────────────────
     const searchEl = document.getElementById('search');
     searchEl.addEventListener('input', () => {
       searchQuery = searchEl.value.trim().toLowerCase();
       applyFilters();
     });
 
-    // ── Rank filter pills ─────────────────────────────────────────────────
     const rankPills = document.querySelectorAll('.rank-pill');
     rankPills.forEach((pill) => {
       pill.addEventListener('click', () => {
@@ -882,7 +880,6 @@
       });
     });
 
-    // ── View toggle ───────────────────────────────────────────────────────
     document.querySelectorAll('.view-pill').forEach((b) => {
       b.addEventListener('click', () => setView(b.dataset.view));
     });
@@ -956,6 +953,77 @@
         applyFilters();
       }
     });
+
+    // ── Draggable panel (desktop) ─────────────────────────────────────────
+    const panel = document.getElementById('panel');
+    const panelHeader = panel.querySelector('.panel-header');
+    const isMobile = () => window.matchMedia('(max-width: 600px)').matches;
+
+    let drag = null;
+
+    function clampToViewport(left, top) {
+      const rect = panel.getBoundingClientRect();
+      const maxLeft = Math.max(0, window.innerWidth - rect.width);
+      const maxTop = Math.max(0, window.innerHeight - rect.height);
+      return {
+        left: Math.min(Math.max(0, left), maxLeft),
+        top: Math.min(Math.max(0, top), maxTop)
+      };
+    }
+
+    function getEventPoint(e) {
+      if (e.touches && e.touches.length) {
+        return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      }
+      return { x: e.clientX, y: e.clientY };
+    }
+
+    function onDragStart(e) {
+      if (isMobile()) return;
+      if (e.target.closest('button, input, a')) return;
+      const rect = panel.getBoundingClientRect();
+      const point = getEventPoint(e);
+      drag = { offsetX: point.x - rect.left, offsetY: point.y - rect.top };
+      panel.classList.add('dragging');
+      if (e.cancelable) e.preventDefault();
+    }
+
+    function onDragMove(e) {
+      if (!drag) return;
+      const point = getEventPoint(e);
+      const next = clampToViewport(point.x - drag.offsetX, point.y - drag.offsetY);
+      panel.style.left = next.left + 'px';
+      panel.style.top = next.top + 'px';
+      if (e.cancelable) e.preventDefault();
+    }
+
+    function onDragEnd() {
+      if (!drag) return;
+      drag = null;
+      panel.classList.remove('dragging');
+    }
+
+    panelHeader.addEventListener('mousedown', onDragStart);
+    window.addEventListener('mousemove', onDragMove);
+    window.addEventListener('mouseup', onDragEnd);
+    panelHeader.addEventListener('touchstart', onDragStart, { passive: false });
+    window.addEventListener('touchmove', onDragMove, { passive: false });
+    window.addEventListener('touchend', onDragEnd);
+    window.addEventListener('touchcancel', onDragEnd);
+
+    function handleResize() {
+      if (isMobile()) {
+        panel.style.left = '';
+        panel.style.top = '';
+        return;
+      }
+      const rect = panel.getBoundingClientRect();
+      const next = clampToViewport(rect.left, rect.top);
+      panel.style.left = next.left + 'px';
+      panel.style.top = next.top + 'px';
+    }
+    window.addEventListener('resize', handleResize);
+    handleResize();
 
     // ── Load GeoJSON and build markers ────────────────────────────────────
     fetch('data/maya_sites.geojson')
