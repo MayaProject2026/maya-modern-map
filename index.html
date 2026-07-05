@@ -51,6 +51,34 @@
       font-weight: 500;
     }
 
+    /* ---------- Site labels on the map ---------- */
+    .site-label {
+      background: transparent !important;
+      border: none !important;
+    }
+    .site-label-inner {
+      display: inline-block;
+      white-space: nowrap;
+      font-size: 11px;
+      font-weight: 600;
+      color: #1a1a1a;
+      padding: 1px 5px;
+      border-radius: 4px;
+      text-shadow:
+        -1px -1px 0 #ffffff,
+         1px -1px 0 #ffffff,
+        -1px  1px 0 #ffffff,
+         1px  1px 0 #ffffff,
+         0 0 3px rgba(255, 255, 255, 0.9);
+      pointer-events: none;
+      transform: translateX(8px);
+      letter-spacing: 0.1px;
+    }
+    .site-label-inner.rank-1 { font-size: 13px; font-weight: 700; color: #1a1a1a; }
+    .site-label-inner.rank-2 { font-size: 12px; font-weight: 700; }
+    .site-label-inner.rank-3 { font-size: 11.5px; }
+    .site-label-inner.rank-4 { font-size: 10.5px; color: #333; }
+
     /* ---------- Floating panel ---------- */
     .panel {
       position: absolute;
@@ -96,7 +124,6 @@
     .panel-header:active { cursor: grabbing; }
     .panel.dragging .panel-header::before { background: var(--gold); }
 
-    /* ---------- Search row ---------- */
     .search-row { display: flex; gap: 8px; align-items: stretch; }
     .search-row .search-wrap { flex: 1; }
     .search-wrap { position: relative; }
@@ -135,7 +162,6 @@
     .radius-btn:hover { background: var(--chip-bg-hover); }
     .radius-btn.active { background: var(--gold); color: #1a1a1a; }
 
-    /* ---------- Radius control ---------- */
     .radius-control {
       display: none; flex-direction: column; gap: 8px;
       background: var(--chip-bg); border-radius: 12px; padding: 12px;
@@ -155,7 +181,6 @@
       font-variant-numeric: tabular-nums;
     }
 
-    /* ---------- Rank filter pills ---------- */
     .rank-filter { display: flex; gap: 5px; }
     .rank-pill {
       flex: 1;
@@ -171,7 +196,6 @@
     .rank-pill:hover { background: var(--chip-bg-hover); }
     .rank-pill.active { background: var(--gold); color: #1a1a1a; }
 
-    /* ---------- Site list ---------- */
     .site-list-wrap { overflow: hidden; }
     .site-list {
       max-height: 280px;
@@ -225,7 +249,6 @@
     .view-pill.active { background: var(--gold); color: #1a1a1a; }
     .view-pill.active:hover { background: var(--gold); }
 
-    /* ---------- Bubble cluster ---------- */
     .bubble-cluster-wrap { background: transparent !important; border: none !important; }
     .bubble-cluster {
       background: rgba(220, 80, 60, 0.5);
@@ -239,7 +262,6 @@
     }
     .bubble-cluster:hover { transform: scale(1.05); box-shadow: 0 4px 14px rgba(220, 80, 60, 0.35); }
 
-    /* ---------- Leaflet zoom control ---------- */
     .leaflet-control-zoom {
       border: none !important;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
@@ -263,7 +285,6 @@
     }
     .leaflet-control-attribution a { color: var(--text) !important; }
 
-    /* ---------- Dark popups ---------- */
     .leaflet-popup-content-wrapper {
       background: var(--popup-bg) !important;
       color: #e8ecf4 !important;
@@ -290,7 +311,6 @@
     }
     .popup-rank .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--gold); }
 
-    /* ---------- Marker clusters ---------- */
     .marker-cluster-small,
     .marker-cluster-medium,
     .marker-cluster-large,
@@ -307,7 +327,6 @@
       color: #1a1a1a; font-weight: 700;
     }
 
-    /* ---------- Bottom-right control stack ---------- */
     .map-controls-br {
       position: absolute; bottom: 30px; right: 10px;
       z-index: 1000;
@@ -361,7 +380,6 @@
     .bm-option.active .bm-name { color: #b07d2a; font-weight: 600; }
     .bm-option .bm-sub { font-size: 11px; color: var(--muted); line-height: 1.2; font-style: italic; }
 
-    /* ---------- User location marker ---------- */
     .user-loc-icon { background: transparent; border: none; }
     .user-loc-dot {
       position: relative; width: 16px; height: 16px;
@@ -383,49 +401,35 @@
       100% { width: 56px; height: 56px; opacity: 0; }
     }
 
-    /* ---------- Details tab (right edge) ---------- */
     .details-tab {
       position: absolute;
-      right: 0;
-      top: 50%;
+      right: 0; top: 50%;
       transform: translateY(-50%);
       z-index: 1000;
       background: var(--gold);
       color: #1a1a1a;
-      border: none;
-      cursor: pointer;
+      border: none; cursor: pointer;
       padding: 16px 8px;
       border-radius: 10px 0 0 10px;
       writing-mode: vertical-rl;
       text-orientation: mixed;
-      font-size: 12px;
-      font-weight: 600;
+      font-size: 12px; font-weight: 600;
       letter-spacing: 1.2px;
       text-transform: uppercase;
       box-shadow: -2px 4px 12px rgba(0, 0, 0, 0.18);
       transition: background 0.16s ease, padding 0.16s ease;
       font-family: inherit;
     }
-    .details-tab:hover {
-      background: var(--gold-soft);
-      padding-right: 12px;
-    }
+    .details-tab:hover { background: var(--gold-soft); padding-right: 12px; }
     .details-tab.hidden { display: none; }
 
-    /* ---------- Analytics panel (slide-in from right) ---------- */
     .analytics-panel {
-      position: absolute;
-      top: 0;
-      right: 0;
-      height: 100%;
-      width: 450px;
-      max-width: 92vw;
-      background: var(--panel-bg);
-      color: var(--text);
+      position: absolute; top: 0; right: 0;
+      height: 100%; width: 450px; max-width: 92vw;
+      background: var(--panel-bg); color: var(--text);
       z-index: 1100;
       box-shadow: -6px 0 24px rgba(0, 0, 0, 0.18);
-      display: flex;
-      flex-direction: column;
+      display: flex; flex-direction: column;
       transform: translateX(100%);
       transition: transform 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
     }
@@ -434,33 +438,23 @@
     .ap-header {
       padding: 20px 22px 16px;
       border-bottom: 1px solid #f0f0f0;
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 12px;
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
     }
     .ap-title { display: flex; flex-direction: column; gap: 4px; }
     .ap-title .ap-eyebrow {
-      font-size: 10.5px;
-      font-weight: 600;
+      font-size: 10.5px; font-weight: 600;
       color: var(--muted-2);
       letter-spacing: 1.3px;
       text-transform: uppercase;
     }
     .ap-title h2 {
-      margin: 0;
-      font-size: 20px;
-      font-weight: 700;
-      color: #1a1a1a;
-      letter-spacing: -0.2px;
+      margin: 0; font-size: 20px; font-weight: 700;
+      color: #1a1a1a; letter-spacing: -0.2px;
     }
     .ap-close {
-      background: transparent;
-      border: none;
-      color: var(--muted);
-      cursor: pointer;
-      padding: 4px;
-      border-radius: 8px;
+      background: transparent; border: none;
+      color: var(--muted); cursor: pointer;
+      padding: 4px; border-radius: 8px;
       transition: background 0.14s ease, color 0.14s ease;
       line-height: 0;
     }
@@ -468,8 +462,7 @@
     .ap-close svg { width: 20px; height: 20px; }
 
     .ap-scroll {
-      overflow-y: auto;
-      padding: 18px 22px 24px;
+      overflow-y: auto; padding: 18px 22px 24px;
       flex: 1;
       scrollbar-width: thin;
       scrollbar-color: #d1d5db transparent;
@@ -479,51 +472,36 @@
     .ap-scroll::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 8px; }
 
     .ap-summary {
-      display: flex;
-      align-items: baseline;
-      gap: 10px;
+      display: flex; align-items: baseline; gap: 10px;
       margin-bottom: 22px;
       padding: 14px 16px;
       background: linear-gradient(135deg, rgba(226,185,111,0.18) 0%, rgba(226,185,111,0.06) 100%);
       border-radius: 12px;
     }
     .ap-summary .ap-summary-count {
-      font-size: 28px;
-      font-weight: 800;
+      font-size: 28px; font-weight: 800;
       color: #1a1a1a;
       font-variant-numeric: tabular-nums;
-      letter-spacing: -0.5px;
-      line-height: 1;
+      letter-spacing: -0.5px; line-height: 1;
     }
     .ap-summary .ap-summary-label {
-      font-size: 13px;
-      color: var(--muted);
-      font-weight: 500;
+      font-size: 13px; color: var(--muted); font-weight: 500;
     }
 
     .ap-section { margin-bottom: 26px; }
     .ap-section:last-child { margin-bottom: 8px; }
-
     .ap-section-title {
-      font-size: 12px;
-      font-weight: 700;
+      font-size: 12px; font-weight: 700;
       color: var(--muted);
       letter-spacing: 0.8px;
       text-transform: uppercase;
       margin: 0 0 12px 0;
     }
-
     .ap-section-body {
-      background: #fafafa;
-      border-radius: 12px;
-      padding: 20px;
-      min-height: 100px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--muted-2);
-      font-size: 12.5px;
-      font-style: italic;
+      background: #fafafa; border-radius: 12px;
+      padding: 20px; min-height: 100px;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--muted-2); font-size: 12.5px; font-style: italic;
     }
   </style>
 </head>
@@ -532,7 +510,6 @@
   <div id="map"></div>
   <div class="map-loading" id="loadingIndicator">Loading Maya sites...</div>
 
-  <!-- Floating panel (top-left) -->
   <div class="panel" id="panel">
     <div class="panel-header" aria-label="Drag to move"></div>
 
@@ -571,17 +548,14 @@
     </div>
   </div>
 
-  <!-- View toggle (bottom-left) -->
   <div class="view-toggle" role="tablist" aria-label="View mode">
     <button class="view-pill active" id="viewPoints" type="button" data-view="points">Points</button>
     <button class="view-pill" id="viewBubbles" type="button" data-view="bubbles">Bubbles</button>
     <button class="view-pill" id="viewHeat" type="button" data-view="heat">Heat</button>
   </div>
 
-  <!-- Details tab -->
   <button class="details-tab" id="detailsTab" type="button" aria-label="Open analytics panel">Details</button>
 
-  <!-- Analytics panel -->
   <aside class="analytics-panel" id="analyticsPanel" aria-hidden="true">
     <div class="ap-header">
       <div class="ap-title">
@@ -618,7 +592,6 @@
     </div>
   </aside>
 
-  <!-- Bottom-right control stack -->
   <div class="map-controls-br">
     <button class="map-icon-btn" id="locateBtn" type="button" title="Find my location" aria-label="Find my location">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -712,7 +685,6 @@
     }
     function openBasemapPopover() { basemapPopover.classList.add("open"); layersBtn.classList.add("active"); }
     function closeBasemapPopover() { basemapPopover.classList.remove("open"); layersBtn.classList.remove("active"); }
-
     layersBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       if (basemapPopover.classList.contains("open")) closeBasemapPopover();
@@ -804,6 +776,53 @@
       }
     });
     let heatLayer = null;
+
+    // ── Site label layer (progressive by rank + zoom) ─────────────────────
+    const labelsLayer = L.layerGroup();
+    const labelMarkerByIdx = new Map();
+
+    // What's the maximum rank we show labels for at this zoom?
+    function labelRankCutoff(zoom) {
+      if (zoom <= 5)  return 1;   // only Major
+      if (zoom <= 7)  return 2;   // + Important
+      if (zoom <= 9)  return 3;   // + Medium
+      return 4;                    // + Minor (rank 5 sites almost never named)
+    }
+
+    function makeLabelMarker(feature) {
+      const p = feature.properties || {};
+      const [lng, lat] = feature.geometry.coordinates;
+      const rank = typeof p.rank === 'number' ? p.rank : 4;
+      const icon = L.divIcon({
+        className: 'site-label',
+        html: `<span class="site-label-inner rank-${rank}">${p.name || ''}</span>`,
+        iconSize: null,
+        iconAnchor: [0, 0]
+      });
+      const marker = L.marker([lat, lng], { icon, interactive: false, keyboard: false });
+      labelMarkerByIdx.set(feature._idx, marker);
+      return marker;
+    }
+
+    function refreshLabels() {
+      labelsLayer.clearLayers();
+      // Only show labels in Points and Bubbles views (not in Heat)
+      if (currentView === 'heat') return;
+
+      const zoom = map.getZoom();
+      const rankCutoff = labelRankCutoff(zoom);
+      const bounds = map.getBounds().pad(0.1);
+
+      currentFiltered.forEach((f) => {
+        const p = f.properties || {};
+        const rank = typeof p.rank === 'number' ? p.rank : 4;
+        if (rank > rankCutoff) return;
+        const [lng, lat] = f.geometry.coordinates;
+        if (!bounds.contains([lat, lng])) return;
+        const marker = labelMarkerByIdx.get(f._idx) || makeLabelMarker(f);
+        labelsLayer.addLayer(marker);
+      });
+    }
 
     function bubbleRadiusFor(rank) {
       if (rank === 1) return 18;
@@ -910,6 +929,7 @@
         }
         if (!map.hasLayer(heatLayer)) map.addLayer(heatLayer);
       }
+      refreshLabels();
     }
 
     function setView(view) {
@@ -953,7 +973,6 @@
       }
     }
 
-    // ── Site list ─────────────────────────────────────────────────────────
     const listEl = document.getElementById('siteList');
 
     function renderList() {
@@ -1014,7 +1033,6 @@
       }
     }
 
-    // ── Search / rank / view ──────────────────────────────────────────────
     const searchEl = document.getElementById('search');
     searchEl.addEventListener('input', () => {
       searchQuery = searchEl.value.trim().toLowerCase();
@@ -1042,7 +1060,6 @@
       b.addEventListener('click', () => setView(b.dataset.view));
     });
 
-    // ── Radius tool ───────────────────────────────────────────────────────
     const radiusBtn = document.getElementById('radiusBtn');
     const radiusControl = document.getElementById('radiusControl');
     const rcSlider = document.getElementById('rcSlider');
@@ -1089,8 +1106,7 @@
         radiusCircle.setRadius(km * 1000);
       } else {
         radiusCircle = L.circle(latlng, {
-          radius: km * 1000,
-          color: '#dc3c3c', weight: 2, fill: false
+          radius: km * 1000, color: '#dc3c3c', weight: 2, fill: false
         }).addTo(map);
       }
       radiusFilter = { lat: latlng.lat, lng: latlng.lng, km };
@@ -1113,7 +1129,7 @@
       }
     });
 
-    // ── Draggable panel ───────────────────────────────────────────────────
+    // ── Panel drag ────────────────────────────────────────────────────────
     const panel = document.getElementById('panel');
     const panelHeader = panel.querySelector('.panel-header');
     const isMobile = () => window.matchMedia('(max-width: 600px)').matches;
@@ -1195,6 +1211,9 @@
       if (apCount) apCount.textContent = currentFiltered.length.toLocaleString('en-US');
     }
 
+    // ── Refresh labels when zoom or pan changes ───────────────────────────
+    map.on('zoomend moveend', refreshLabels);
+
     // ── Load GeoJSON and build markers ────────────────────────────────────
     fetch('data/maya_sites.geojson')
       .then(response => {
@@ -1221,10 +1240,12 @@
 
         currentFiltered = allSites.slice();
         map.addLayer(pointsCluster);
+        map.addLayer(labelsLayer);
 
         renderList();
         updateCountLabel();
         updateAnalytics();
+        refreshLabels();
 
         const loading = document.getElementById('loadingIndicator');
         if (loading) {
