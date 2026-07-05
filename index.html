@@ -52,6 +52,8 @@
     }
 
     /* ---------- Site labels on the map ---------- */
+    .leaflet-labels-pane { pointer-events: none; }
+
     .site-label {
       background: transparent !important;
       border: none !important;
@@ -74,10 +76,11 @@
       transform: translateX(8px);
       letter-spacing: 0.1px;
     }
-    .site-label-inner.rank-1 { font-size: 13px; font-weight: 700; color: #1a1a1a; }
+    .site-label-inner.rank-1 { font-size: 13px; font-weight: 700; }
     .site-label-inner.rank-2 { font-size: 12px; font-weight: 700; }
     .site-label-inner.rank-3 { font-size: 11.5px; }
     .site-label-inner.rank-4 { font-size: 10.5px; color: #333; }
+    .site-label-inner.rank-5 { font-size: 10.5px; color: #333; }
 
     /* ---------- Floating panel ---------- */
     .panel {
@@ -227,7 +230,6 @@
       font-size: 13px; text-align: center; font-style: italic;
     }
 
-    /* ---------- View toggle pills ---------- */
     .view-toggle {
       position: absolute;
       bottom: 30px; left: 16px;
@@ -629,6 +631,11 @@
       zoomControl: true,
     });
 
+    // Dedicated pane for labels so they always render above markers/clusters
+    map.createPane('labelsPane');
+    map.getPane('labelsPane').style.zIndex = 640;
+    map.getPane('labelsPane').classList.add('leaflet-labels-pane');
+
     // ── Basemaps ──────────────────────────────────────────────────────────
     const basemaps = {
       "OpenStreetMap": L.tileLayer(
@@ -778,15 +785,14 @@
     let heatLayer = null;
 
     // ── Site label layer (progressive by rank + zoom) ─────────────────────
-    const labelsLayer = L.layerGroup();
+    const labelsLayer = L.layerGroup().addTo(map);
     const labelMarkerByIdx = new Map();
 
-    // What's the maximum rank we show labels for at this zoom?
     function labelRankCutoff(zoom) {
-      if (zoom <= 5)  return 1;   // only Major
-      if (zoom <= 7)  return 2;   // + Important
+      if (zoom <= 6)  return 1;   // Major from the overview zoom
+      if (zoom <= 8)  return 2;   // + Important
       if (zoom <= 9)  return 3;   // + Medium
-      return 4;                    // + Minor (rank 5 sites almost never named)
+      return 5;                    // everything when zoomed right in
     }
 
     function makeLabelMarker(feature) {
@@ -796,17 +802,21 @@
       const icon = L.divIcon({
         className: 'site-label',
         html: `<span class="site-label-inner rank-${rank}">${p.name || ''}</span>`,
-        iconSize: null,
-        iconAnchor: [0, 0]
+        iconSize: [0, 0],
+        iconAnchor: [0, 8]
       });
-      const marker = L.marker([lat, lng], { icon, interactive: false, keyboard: false });
+      const marker = L.marker([lat, lng], {
+        icon,
+        pane: 'labelsPane',
+        interactive: false,
+        keyboard: false
+      });
       labelMarkerByIdx.set(feature._idx, marker);
       return marker;
     }
 
     function refreshLabels() {
       labelsLayer.clearLayers();
-      // Only show labels in Points and Bubbles views (not in Heat)
       if (currentView === 'heat') return;
 
       const zoom = map.getZoom();
@@ -1212,7 +1222,8 @@
     }
 
     // ── Refresh labels when zoom or pan changes ───────────────────────────
-    map.on('zoomend moveend', refreshLabels);
+    map.on('zoomend', refreshLabels);
+    map.on('moveend', refreshLabels);
 
     // ── Load GeoJSON and build markers ────────────────────────────────────
     fetch('data/maya_sites.geojson')
@@ -1240,7 +1251,6 @@
 
         currentFiltered = allSites.slice();
         map.addLayer(pointsCluster);
-        map.addLayer(labelsLayer);
 
         renderList();
         updateCountLabel();
