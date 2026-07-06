@@ -499,12 +499,14 @@
       text-transform: uppercase;
       margin: 0 0 12px 0;
     }
-    .ap-section-body {
-      background: #fafafa; border-radius: 12px;
-      padding: 20px; min-height: 100px;
-      display: flex; align-items: center; justify-content: center;
-      color: var(--muted-2); font-size: 12.5px; font-style: italic;
+    .ap-chart-wrap {
+      background: #fafafa;
+      border-radius: 12px;
+      padding: 14px;
+      height: 210px;
+      position: relative;
     }
+    .ap-chart-wrap.tall { height: 250px; }
   </style>
 </head>
 <body>
@@ -579,17 +581,17 @@
 
       <div class="ap-section">
         <h3 class="ap-section-title">By country</h3>
-        <div class="ap-section-body" id="apCountry">Country chart coming next</div>
+        <div class="ap-chart-wrap"><canvas id="chartCountry"></canvas></div>
       </div>
 
       <div class="ap-section">
         <h3 class="ap-section-title">By state / region</h3>
-        <div class="ap-section-body" id="apStates">States chart coming soon</div>
+        <div class="ap-chart-wrap tall"><canvas id="chartStates"></canvas></div>
       </div>
 
       <div class="ap-section">
         <h3 class="ap-section-title">By archaeological rank</h3>
-        <div class="ap-section-body" id="apRank">Rank distribution coming soon</div>
+        <div class="ap-chart-wrap"><canvas id="chartRank"></canvas></div>
       </div>
     </div>
   </aside>
@@ -622,6 +624,8 @@
           crossorigin=""></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 
   <script>
     // ── Initialise the map ─────────────────────────────────────────────────
@@ -631,7 +635,6 @@
       zoomControl: true,
     });
 
-    // Dedicated pane for labels so they always render above markers/clusters
     map.createPane('labelsPane');
     map.getPane('labelsPane').style.zIndex = 640;
     map.getPane('labelsPane').classList.add('leaflet-labels-pane');
@@ -789,10 +792,10 @@
     const labelMarkerByIdx = new Map();
 
     function labelRankCutoff(zoom) {
-      if (zoom <= 6)  return 1;   // Major from the overview zoom
-      if (zoom <= 8)  return 2;   // + Important
-      if (zoom <= 9)  return 3;   // + Medium
-      return 5;                    // everything when zoomed right in
+      if (zoom <= 6)  return 1;
+      if (zoom <= 8)  return 2;
+      if (zoom <= 9)  return 3;
+      return 5;
     }
 
     function makeLabelMarker(feature) {
@@ -1217,8 +1220,162 @@
     detailsTab.addEventListener('click', openAnalytics);
     apClose.addEventListener('click', closeAnalytics);
 
+    // ── Analytics charts (Chart.js) ───────────────────────────────────────
+    let chartCountry = null;
+    let chartStates = null;
+    let chartRank = null;
+
+    const COUNTRY_COLORS = ['#e2b96f', '#c98d4b', '#8d6e63', '#5d7a8a', '#a3b18a', '#b0743c', '#9ca3af'];
+    const RANK_BAR_COLORS = ['#b07d2a', '#c9994a', '#e2b96f', '#edd0a0', '#f3ddb8'];
+
+    if (typeof Chart !== 'undefined' && typeof ChartDataLabels !== 'undefined') {
+      Chart.register(ChartDataLabels);
+      Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
+      Chart.defaults.color = '#6b7280';
+    }
+
+    function computeAnalyticsData() {
+      const byCountry = {};
+      const byState = {};
+      const rankCounts = [0, 0, 0, 0, 0];
+      currentFiltered.forEach((f) => {
+        const p = f.properties || {};
+        const c = p.country || 'Unknown';
+        byCountry[c] = (byCountry[c] || 0) + 1;
+        const s = p.state || 'Unknown';
+        byState[s] = (byState[s] || 0) + 1;
+        const r = typeof p.rank === 'number' ? p.rank : null;
+        if (r >= 1 && r <= 5) rankCounts[r - 1] += 1;
+      });
+      const countryEntries = Object.entries(byCountry).sort((a, b) => b[1] - a[1]);
+      const stateEntries = Object.entries(byState).sort((a, b) => b[1] - a[1]).slice(0, 8);
+      return { countryEntries, stateEntries, rankCounts };
+    }
+
+    function renderCharts() {
+      if (typeof Chart === 'undefined') return;
+      const { countryEntries, stateEntries, rankCounts } = computeAnalyticsData();
+
+      const cLabels = countryEntries.map((e) => e[0]);
+      const cData = countryEntries.map((e) => e[1]);
+      if (!chartCountry) {
+        chartCountry = new Chart(document.getElementById('chartCountry'), {
+          type: 'doughnut',
+          data: {
+            labels: cLabels,
+            datasets: [{
+              data: cData,
+              backgroundColor: COUNTRY_COLORS,
+              borderColor: '#fafafa',
+              borderWidth: 2,
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '55%',
+            plugins: {
+              legend: {
+                position: 'right',
+                labels: { boxWidth: 10, boxHeight: 10, padding: 10, font: { size: 11 } }
+              },
+              datalabels: {
+                color: '#1a1a1a',
+                font: { size: 10, weight: '600' },
+                formatter: (value, ctx) => {
+                  const sum = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                  return sum > 0 && value / sum >= 0.05 ? value.toLocaleString() : '';
+                }
+              }
+            }
+          }
+        });
+      } else {
+        chartCountry.data.labels = cLabels;
+        chartCountry.data.datasets[0].data = cData;
+        chartCountry.update('none');
+      }
+
+      const sLabels = stateEntries.map((e) => e[0]);
+      const sData = stateEntries.map((e) => e[1]);
+      if (!chartStates) {
+        chartStates = new Chart(document.getElementById('chartStates'), {
+          type: 'bar',
+          data: {
+            labels: sLabels,
+            datasets: [{
+              data: sData,
+              backgroundColor: '#e2b96f',
+              borderRadius: 6,
+              barThickness: 13,
+            }]
+          },
+          options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            layout: { padding: { right: 34 } },
+            scales: {
+              x: { grid: { color: '#eeeeee' }, ticks: { font: { size: 10 } }, beginAtZero: true },
+              y: { grid: { display: false }, ticks: { font: { size: 11 } } }
+            },
+            plugins: {
+              legend: { display: false },
+              datalabels: {
+                anchor: 'end', align: 'right',
+                color: '#6b7280',
+                font: { size: 10, weight: '600' },
+                formatter: (v) => v.toLocaleString()
+              }
+            }
+          }
+        });
+      } else {
+        chartStates.data.labels = sLabels;
+        chartStates.data.datasets[0].data = sData;
+        chartStates.update('none');
+      }
+
+      if (!chartRank) {
+        chartRank = new Chart(document.getElementById('chartRank'), {
+          type: 'bar',
+          data: {
+            labels: ['Major', 'Important', 'Medium', 'Minor', 'Minimal'],
+            datasets: [{
+              data: rankCounts,
+              backgroundColor: RANK_BAR_COLORS,
+              borderRadius: 6,
+              barThickness: 26,
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            layout: { padding: { top: 18 } },
+            scales: {
+              x: { grid: { display: false }, ticks: { font: { size: 10.5 } } },
+              y: { grid: { color: '#eeeeee' }, ticks: { font: { size: 10 } }, beginAtZero: true }
+            },
+            plugins: {
+              legend: { display: false },
+              datalabels: {
+                anchor: 'end', align: 'end',
+                color: '#6b7280',
+                font: { size: 10, weight: '600' },
+                formatter: (v) => v.toLocaleString()
+              }
+            }
+          }
+        });
+      } else {
+        chartRank.data.datasets[0].data = rankCounts;
+        chartRank.update('none');
+      }
+    }
+
     function updateAnalytics() {
       if (apCount) apCount.textContent = currentFiltered.length.toLocaleString('en-US');
+      renderCharts();
     }
 
     // ── Refresh labels when zoom or pan changes ───────────────────────────
