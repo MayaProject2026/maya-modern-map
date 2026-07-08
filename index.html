@@ -785,9 +785,14 @@
         });
       }
     });
+
+    // Major (rank 1) sites are never clustered so they stay visible at every zoom
+    const majorPointsLayer = L.layerGroup();
+    const majorBubblesLayer = L.layerGroup();
+
     let heatLayer = null;
 
-    // ── Site label layer (progressive by rank + zoom) ─────────────────────
+    // ── Site label layer (progressive, collision-aware) ───────────────────
     const labelsLayer = L.layerGroup().addTo(map);
     const labelMarkerByIdx = new Map();
 
@@ -795,16 +800,24 @@
       if (zoom <= 6)  return 1;
       if (zoom <= 8)  return 2;
       if (zoom <= 9)  return 3;
-      return 5;
+      return Infinity;
+    }
+
+    function labelFontSize(rank) {
+      if (rank === 1) return 13;
+      if (rank === 2) return 12;
+      if (rank === 3) return 11.5;
+      return 10.5;
     }
 
     function makeLabelMarker(feature) {
       const p = feature.properties || {};
       const [lng, lat] = feature.geometry.coordinates;
       const rank = typeof p.rank === 'number' ? p.rank : 4;
+      const rankClass = (rank >= 1 && rank <= 5) ? rank : 4;
       const icon = L.divIcon({
         className: 'site-label',
-        html: `<span class="site-label-inner rank-${rank}">${p.name || ''}</span>`,
+        html: `<span class="site-label-inner rank-${rankClass}">${p.name || ''}</span>`,
         iconSize: [0, 0],
         iconAnchor: [0, 8]
       });
@@ -826,15 +839,42 @@
       const rankCutoff = labelRankCutoff(zoom);
       const bounds = map.getBounds().pad(0.1);
 
+      // Collect candidates inside the view that pass the rank cutoff
+      const candidates = [];
       currentFiltered.forEach((f) => {
         const p = f.properties || {};
+        if (!p.name) return;
         const rank = typeof p.rank === 'number' ? p.rank : 4;
         if (rank > rankCutoff) return;
         const [lng, lat] = f.geometry.coordinates;
         if (!bounds.contains([lat, lng])) return;
-        const marker = labelMarkerByIdx.get(f._idx) || makeLabelMarker(f);
-        labelsLayer.addLayer(marker);
+        candidates.push({ f, rank, lat, lng, name: p.name });
       });
+
+      // Higher significance places first, then alphabetical for stability
+      candidates.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
+
+      // Greedy placement: skip any label whose box would overlap one already placed
+      const placed = [];
+      for (const c of candidates) {
+        if (placed.length >= 400 && c.rank > 1) continue;
+        const pt = map.latLngToContainerPoint([c.lat, c.lng]);
+        const fs = labelFontSize(c.rank);
+        const w = c.name.length * fs * 0.62 + 18;
+        const h = fs + 8;
+        const rect = { x1: pt.x + 6, y1: pt.y - h / 2, x2: pt.x + 6 + w, y2: pt.y + h / 2 };
+        let collides = false;
+        for (const r of placed) {
+          if (rect.x1 < r.x2 && rect.x2 > r.x1 && rect.y1 < r.y2 && rect.y2 > r.y1) {
+            collides = true;
+            break;
+          }
+        }
+        if (collides) continue;
+        placed.push(rect);
+        const marker = labelMarkerByIdx.get(c.f._idx) || makeLabelMarker(c.f);
+        labelsLayer.addLayer(marker);
+      }
     }
 
     function bubbleRadiusFor(rank) {
@@ -847,9 +887,15 @@
 
     function makePointMarker(feature, index) {
       const [lng, lat] = feature.geometry.coordinates;
+      const rank = feature.properties && feature.properties.rank;
+      const isMajor = rank === 1;
       const marker = L.circleMarker([lat, lng], {
-        radius: 5, fillColor: '#e2b96f', color: '#ffffff',
-        weight: 1.2, opacity: 1, fillOpacity: 0.9,
+        radius: isMajor ? 7 : 5,
+        fillColor: '#e2b96f',
+        color: '#ffffff',
+        weight: isMajor ? 1.6 : 1.2,
+        opacity: 1,
+        fillOpacity: isMajor ? 1 : 0.9,
       });
       marker.bindPopup(buildPopup(feature.properties));
       marker.on('popupopen', () => setActiveByIdx(index, { skipMapZoom: true }));
@@ -904,6 +950,8 @@
     function clearAllViewLayers() {
       if (map.hasLayer(pointsCluster)) map.removeLayer(pointsCluster);
       if (map.hasLayer(bubblesCluster)) map.removeLayer(bubblesCluster);
+      if (map.hasLayer(majorPointsLayer)) map.removeLayer(majorPointsLayer);
+      if (map.hasLayer(majorBubblesLayer)) map.removeLayer(majorBubblesLayer);
       if (heatLayer && map.hasLayer(heatLayer)) map.removeLayer(heatLayer);
       map.closePopup();
     }
@@ -911,22 +959,32 @@
     function rebuildCurrentViewLayer() {
       if (currentView === "points") {
         pointsCluster.clearLayers();
-        const markers = [];
+        majorPointsLayer.clearLayers();
+        const clustered = [];
         currentFiltered.forEach((f) => {
           const m = pointMarkerByIdx.get(f._idx);
-          if (m) markers.push(m);
+          if (!m) return;
+          const rank = f.properties && f.properties.rank;
+          if (rank === 1) majorPointsLayer.addLayer(m);
+          else clustered.push(m);
         });
-        pointsCluster.addLayers(markers);
+        pointsCluster.addLayers(clustered);
         if (!map.hasLayer(pointsCluster)) map.addLayer(pointsCluster);
+        if (!map.hasLayer(majorPointsLayer)) map.addLayer(majorPointsLayer);
       } else if (currentView === "bubbles") {
         bubblesCluster.clearLayers();
-        const markers = [];
+        majorBubblesLayer.clearLayers();
+        const clustered = [];
         currentFiltered.forEach((f) => {
           const m = bubbleMarkerByIdx.get(f._idx);
-          if (m) markers.push(m);
+          if (!m) return;
+          const rank = f.properties && f.properties.rank;
+          if (rank === 1) majorBubblesLayer.addLayer(m);
+          else clustered.push(m);
         });
-        bubblesCluster.addLayers(markers);
+        bubblesCluster.addLayers(clustered);
         if (!map.hasLayer(bubblesCluster)) map.addLayer(bubblesCluster);
+        if (!map.hasLayer(majorBubblesLayer)) map.addLayer(majorBubblesLayer);
       } else if (currentView === "heat") {
         const heatPoints = currentFiltered.map((f) => {
           const [lng, lat] = f.geometry.coordinates;
@@ -1030,12 +1088,14 @@
 
       if (marker && !opts.skipMapZoom) {
         const latlng = marker.getLatLng();
-        if (currentView === "heat") {
-          map.flyTo(latlng, Math.max(map.getZoom(), 10), { duration: 0.8 });
-        } else {
-          const cluster = (currentView === "points") ? pointsCluster : bubblesCluster;
+        const cluster = (currentView === "points") ? pointsCluster : bubblesCluster;
+        if (cluster.hasLayer(marker)) {
           cluster.zoomToShowLayer(marker, () => marker.openPopup());
           map.flyTo(latlng, Math.max(map.getZoom(), 10), { duration: 0.8 });
+        } else {
+          // Major sites live outside the cluster, open directly
+          map.flyTo(latlng, Math.max(map.getZoom(), 10), { duration: 0.8 });
+          marker.openPopup();
         }
       } else if (currentView === "heat" && !opts.skipMapZoom) {
         const feature = allSites.find((f) => f._idx === idx);
@@ -1397,22 +1457,17 @@
         });
         allSites = features.map((f, i) => { f._idx = i; return f; });
 
-        const pointMarkers = [];
-        const bubbleMarkers = [];
         allSites.forEach((feature) => {
-          pointMarkers.push(makePointMarker(feature, feature._idx));
-          bubbleMarkers.push(makeBubbleMarker(feature, feature._idx));
+          makePointMarker(feature, feature._idx);
+          makeBubbleMarker(feature, feature._idx);
         });
-        pointsCluster.addLayers(pointMarkers);
-        bubblesCluster.addLayers(bubbleMarkers);
 
         currentFiltered = allSites.slice();
-        map.addLayer(pointsCluster);
+        rebuildCurrentViewLayer();
 
         renderList();
         updateCountLabel();
         updateAnalytics();
-        refreshLabels();
 
         const loading = document.getElementById('loadingIndicator');
         if (loading) {
