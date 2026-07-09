@@ -279,6 +279,22 @@
     .leaflet-control-zoom a:hover { background: #f5f5f5 !important; }
     .leaflet-bar { border: none !important; }
 
+    /* Home control, under the zoom stack like the design */
+    .leaflet-control-home {
+      border: none !important;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+      border-radius: 10px !important;
+      overflow: hidden;
+    }
+    .leaflet-control-home a {
+      background: var(--panel-bg) !important;
+      color: var(--text) !important;
+      border: none !important;
+      font-size: 20px;
+      line-height: 28px;
+    }
+    .leaflet-control-home a:hover { background: #f5f5f5 !important; }
+
     .leaflet-control-attribution {
       background: rgba(255, 255, 255, 0.85) !important;
       color: var(--muted) !important;
@@ -425,88 +441,126 @@
     .details-tab:hover { background: var(--gold-soft); padding-right: 12px; }
     .details-tab.hidden { display: none; }
 
+    /* ---------- Details panel, matching the original design ---------- */
     .analytics-panel {
-      position: absolute; top: 0; right: 0;
-      height: 100%; width: 450px; max-width: 92vw;
-      background: var(--panel-bg); color: var(--text);
+      position: fixed;
+      right: 0; top: 0;
+      height: 100vh;
+      width: 340px;
+      max-width: 92vw;
+      background: #fafafa;
+      box-shadow: -4px 0 24px rgba(0, 0, 0, 0.15);
       z-index: 1100;
-      box-shadow: -6px 0 24px rgba(0, 0, 0, 0.18);
-      display: flex; flex-direction: column;
+      overflow-y: auto;
       transform: translateX(100%);
-      transition: transform 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
-    }
-    .analytics-panel.open { transform: translateX(0); }
-
-    .ap-header {
-      padding: 20px 22px 16px;
-      border-bottom: 1px solid #f0f0f0;
-      display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
-    }
-    .ap-title { display: flex; flex-direction: column; gap: 4px; }
-    .ap-title .ap-eyebrow {
-      font-size: 10.5px; font-weight: 600;
-      color: var(--muted-2);
-      letter-spacing: 1.3px;
-      text-transform: uppercase;
-    }
-    .ap-title h2 {
-      margin: 0; font-size: 20px; font-weight: 700;
-      color: #1a1a1a; letter-spacing: -0.2px;
-    }
-    .ap-close {
-      background: transparent; border: none;
-      color: var(--muted); cursor: pointer;
-      padding: 4px; border-radius: 8px;
-      transition: background 0.14s ease, color 0.14s ease;
-      line-height: 0;
-    }
-    .ap-close:hover { background: var(--chip-bg); color: #1a1a1a; }
-    .ap-close svg { width: 20px; height: 20px; }
-
-    .ap-scroll {
-      overflow-y: auto; padding: 18px 22px 24px;
-      flex: 1;
+      transition: transform 0.3s ease;
+      color: #1a1a1a;
       scrollbar-width: thin;
       scrollbar-color: #d1d5db transparent;
     }
-    .ap-scroll::-webkit-scrollbar { width: 6px; }
-    .ap-scroll::-webkit-scrollbar-track { background: transparent; }
-    .ap-scroll::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 8px; }
+    .analytics-panel.open { transform: translateX(0); }
+    .analytics-panel::-webkit-scrollbar { width: 6px; }
+    .analytics-panel::-webkit-scrollbar-track { background: transparent; }
+    .analytics-panel::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 8px; }
 
-    .ap-summary {
-      display: flex; align-items: baseline; gap: 10px;
-      margin-bottom: 22px;
-      padding: 14px 16px;
-      background: linear-gradient(135deg, rgba(226,185,111,0.18) 0%, rgba(226,185,111,0.06) 100%);
-      border-radius: 12px;
+    .ap-close {
+      position: absolute;
+      top: 10px; right: 10px;
+      z-index: 2;
+      background: transparent;
+      border: none;
+      color: #9ca3af; cursor: pointer;
+      padding: 6px; border-radius: 8px;
+      transition: background 0.14s ease, color 0.14s ease;
+      line-height: 0;
     }
-    .ap-summary .ap-summary-count {
-      font-size: 28px; font-weight: 800;
-      color: #1a1a1a;
-      font-variant-numeric: tabular-nums;
-      letter-spacing: -0.5px; line-height: 1;
-    }
-    .ap-summary .ap-summary-label {
-      font-size: 13px; color: var(--muted); font-weight: 500;
-    }
+    .ap-close:hover { background: #eeeeee; color: #1a1a1a; }
+    .ap-close svg { width: 18px; height: 18px; }
 
-    .ap-section { margin-bottom: 26px; }
-    .ap-section:last-child { margin-bottom: 8px; }
-    .ap-section-title {
-      font-size: 12px; font-weight: 700;
-      color: var(--muted);
-      letter-spacing: 0.8px;
+    .ap-inner { padding: 22px 20px 32px; }
+    .ap-section { margin-bottom: 24px; }
+    .ap-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #e2b96f;
+      margin: 0 0 4px 0;
+      letter-spacing: 0.6px;
+      text-align: center;
       text-transform: uppercase;
+    }
+    .ap-subtitle {
+      font-size: 12px;
+      color: #9ca3af;
       margin: 0 0 12px 0;
+      letter-spacing: 0.2px;
+      text-align: center;
     }
-    .ap-chart-wrap {
-      background: #fafafa;
-      border-radius: 12px;
-      padding: 14px;
-      height: 210px;
-      position: relative;
+    .ap-lede {
+      font-size: 13px;
+      line-height: 1.55;
+      color: #374151;
+      margin: 0;
     }
-    .ap-chart-wrap.tall { height: 250px; }
+    .ap-live {
+      text-align: center;
+      font-size: 12px;
+      color: #6b7280;
+      margin: 12px 0 0;
+      font-variant-numeric: tabular-nums;
+    }
+    .ap-live strong { color: #1a1a1a; font-weight: 700; }
+    .ap-heading {
+      font-size: 14px;
+      font-weight: 700;
+      color: #e2b96f;
+      margin: 0 0 12px 0;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      text-align: center;
+    }
+    .ap-chart-wrap { position: relative; }
+
+    .rank-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+      font-size: 12px;
+    }
+    .rank-label { flex: 0 0 110px; color: #374151; font-weight: 500; }
+    .rank-bar-wrap {
+      flex: 1;
+      background: #ececec;
+      border-radius: 6px;
+      height: 10px;
+      overflow: hidden;
+    }
+    .rank-bar { height: 100%; border-radius: 6px; transition: width 0.4s ease; }
+    .rank-count {
+      flex: 0 0 46px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      color: #6b7280;
+      font-weight: 500;
+    }
+
+    .tier-card {
+      border-radius: 10px;
+      border: 1px solid #eeeeee;
+      padding: 12px;
+      margin-bottom: 8px;
+      background: #ffffff;
+    }
+    .tier-name { font-size: 13px; font-weight: 600; color: #1a1a1a; margin: 0 0 4px 0; }
+    .tier-desc { font-size: 12px; line-height: 1.5; color: #4b5563; margin: 0; }
+
+    .ap-note {
+      font-size: 11px;
+      font-style: italic;
+      color: #9ca3af;
+      line-height: 1.55;
+      margin: 0;
+    }
   </style>
 </head>
 <body>
@@ -558,41 +612,67 @@
     <button class="view-pill" id="viewHeat" type="button" data-view="heat">Heat</button>
   </div>
 
-  <button class="details-tab" id="detailsTab" type="button" aria-label="Open analytics panel">Details</button>
+  <button class="details-tab" id="detailsTab" type="button" aria-label="Open details panel">Details</button>
 
   <aside class="analytics-panel" id="analyticsPanel" aria-hidden="true">
-    <div class="ap-header">
-      <div class="ap-title">
-        <span class="ap-eyebrow">Overview</span>
-        <h2>Analytics</h2>
-      </div>
-      <button class="ap-close" id="apClose" type="button" aria-label="Close analytics panel">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="18" y1="6" x2="6" y2="18"></line>
-          <line x1="6" y1="6" x2="18" y2="18"></line>
-        </svg>
-      </button>
-    </div>
-    <div class="ap-scroll">
-      <div class="ap-summary">
-        <div class="ap-summary-count" id="apCount">0</div>
-        <div class="ap-summary-label">sites in current view</div>
-      </div>
+    <button class="ap-close" id="apClose" type="button" aria-label="Close details panel">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    </button>
+    <div class="ap-inner">
+      <!-- Section 1 -->
+      <section class="ap-section">
+        <h2 class="ap-title">Maya Civilisation</h2>
+        <p class="ap-subtitle">Eastern Archaeological Atlas of Mesoamerica</p>
+        <p class="ap-lede">The Maya civilisation flourished across Mesoamerica for over 3,000 years, leaving behind thousands of archaeological sites spanning modern-day Mexico, Guatemala, Belize, Honduras, and El Salvador. At its peak during the Classic period, the Maya built sophisticated cities, developed a complex writing system, and created advanced astronomical calendars. This atlas documents 5,223 named sites from the EAAMS dataset.</p>
+        <p class="ap-live"><strong id="apCount">0</strong> sites in the current view</p>
+      </section>
 
-      <div class="ap-section">
-        <h3 class="ap-section-title">By country</h3>
-        <div class="ap-chart-wrap"><canvas id="chartCountry"></canvas></div>
-      </div>
+      <!-- Section 2 -->
+      <section class="ap-section">
+        <h3 class="ap-heading">Sites by Country</h3>
+        <div class="ap-chart-wrap" style="height:220px;">
+          <canvas id="chartCountry"></canvas>
+        </div>
+      </section>
 
-      <div class="ap-section">
-        <h3 class="ap-section-title">By state / region</h3>
-        <div class="ap-chart-wrap tall"><canvas id="chartStates"></canvas></div>
-      </div>
+      <!-- Section 3 -->
+      <section class="ap-section">
+        <h3 class="ap-heading">Top Regions by Site Count</h3>
+        <div class="ap-chart-wrap" style="height:260px;">
+          <canvas id="chartStates"></canvas>
+        </div>
+      </section>
 
-      <div class="ap-section">
-        <h3 class="ap-section-title">By archaeological rank</h3>
-        <div class="ap-chart-wrap"><canvas id="chartRank"></canvas></div>
-      </div>
+      <!-- Section 4 -->
+      <section class="ap-section">
+        <h3 class="ap-heading">Sites by Significance</h3>
+        <div id="rankBars"></div>
+      </section>
+
+      <!-- Section 5 -->
+      <section class="ap-section">
+        <h3 class="ap-heading">Best Areas to Visit</h3>
+        <div class="tier-card">
+          <p class="tier-name">Yucatán Peninsula</p>
+          <p class="tier-desc">847+ sites across Yucatán, Campeche and Quintana Roo. Includes Chichén Itzá, Uxmal, Tulum and Dzibilchaltún. Nearest airports: Mérida and Cancún.</p>
+        </div>
+        <div class="tier-card">
+          <p class="tier-name">Petén, Guatemala</p>
+          <p class="tier-desc">300+ sites in the jungle heartland. Includes Tikal, El Mirador and Nakbe. Nearest airport: Flores.</p>
+        </div>
+        <div class="tier-card">
+          <p class="tier-name">Chiapas, Mexico</p>
+          <p class="tier-desc">180+ sites along the Usumacinta River. Includes Palenque, Yaxchilán and Bonampak. Nearest airport: Palenque.</p>
+        </div>
+      </section>
+
+      <!-- Section 6 -->
+      <section class="ap-section">
+        <p class="ap-note">Data source: Eastern Archaeological Atlas of Mesoamerica and Sites (EAAMS). Coordinates in WGS84 (EPSG:4326). Site significance ranked 1 to 6 by the original dataset compilers.</p>
+      </section>
     </div>
   </aside>
 
@@ -629,11 +709,38 @@
 
   <script>
     // ── Initialise the map ─────────────────────────────────────────────────
+    const HOME_CENTER = [16.5, -89.5];
+    const HOME_ZOOM = 6;
+
     const map = L.map('map', {
-      center: [16.5, -89.5],
-      zoom: 6, minZoom: 3, maxZoom: 18,
-      zoomControl: true,
+      center: HOME_CENTER,
+      zoom: HOME_ZOOM, minZoom: 3, maxZoom: 18,
+      zoomControl: false,
     });
+
+    // Zoom controls explicitly placed top right
+    L.control.zoom({ position: 'topright' }).addTo(map);
+
+    // Home button, also top right, under the zoom stack
+    const HomeControl = L.Control.extend({
+      options: { position: 'topright' },
+      onAdd: function () {
+        const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-home');
+        const link = L.DomUtil.create('a', '', container);
+        link.href = '#';
+        link.role = 'button';
+        link.title = 'Go to home view';
+        link.setAttribute('aria-label', 'Go to home view');
+        link.innerHTML = '&#8962;';
+        L.DomEvent.disableClickPropagation(container);
+        L.DomEvent.on(link, 'click', (e) => {
+          L.DomEvent.preventDefault(e);
+          map.flyTo(HOME_CENTER, HOME_ZOOM, { duration: 1.1 });
+        });
+        return container;
+      }
+    });
+    map.addControl(new HomeControl());
 
     map.createPane('labelsPane');
     map.getPane('labelsPane').style.zIndex = 640;
@@ -1156,7 +1263,7 @@
         applyFilters();
       } else {
         rcHint.style.display = 'block';
-        rcReadout.innerHTML = `<strong>0</strong> sites — click the map to begin`;
+        rcReadout.innerHTML = `<strong>0</strong> sites, click the map to begin`;
       }
     }
 
@@ -1258,11 +1365,12 @@
     window.addEventListener('resize', handleResize);
     handleResize();
 
-    // ── Analytics panel ───────────────────────────────────────────────────
+    // ── Details panel open and close ──────────────────────────────────────
     const detailsTab = document.getElementById('detailsTab');
     const analyticsPanel = document.getElementById('analyticsPanel');
     const apClose = document.getElementById('apClose');
     const apCount = document.getElementById('apCount');
+    const rankBarsEl = document.getElementById('rankBars');
 
     function openAnalytics() {
       analyticsPanel.classList.add('open');
@@ -1278,13 +1386,26 @@
     detailsTab.addEventListener('click', openAnalytics);
     apClose.addEventListener('click', closeAnalytics);
 
-    // ── Analytics charts (Chart.js), scoped to the current map view ──────
+    // ── Charts and significance bars, scoped to the current map view ─────
     let chartCountry = null;
     let chartStates = null;
-    let chartRank = null;
 
-    const COUNTRY_COLORS = ['#e2b96f', '#c98d4b', '#8d6e63', '#5d7a8a', '#a3b18a', '#b0743c', '#9ca3af'];
-    const RANK_BAR_COLORS = ['#b07d2a', '#c9994a', '#e2b96f', '#edd0a0', '#f3ddb8'];
+    // Country order and colours from the original design
+    const COUNTRY_ORDER = ['Mexico', 'Guatemala', 'Belize', 'Honduras', 'El Salvador'];
+    const COUNTRY_COLOR_MAP = {
+      'Mexico':      '#e2b96f',
+      'Guatemala':   '#4ecdc4',
+      'Belize':      '#ff6b6b',
+      'Honduras':    '#9b59b6',
+      'El Salvador': '#2ecc71'
+    };
+    const RANK_BAR_DEFS = [
+      { label: 'Major Centre', color: '#e2b96f' },
+      { label: 'Important',    color: '#d6b27a' },
+      { label: 'Medium',       color: '#c8b694' },
+      { label: 'Minor',        color: '#bdbdbd' },
+      { label: 'Minimal',      color: '#cccccc' }
+    ];
 
     if (typeof Chart !== 'undefined' && typeof ChartDataLabels !== 'undefined') {
       Chart.register(ChartDataLabels);
@@ -1313,59 +1434,93 @@
         const r = typeof p.rank === 'number' ? p.rank : null;
         if (r >= 1 && r <= 5) rankCounts[r - 1] += 1;
       });
-      const countryEntries = Object.entries(byCountry).sort((a, b) => b[1] - a[1]);
+
+      // Country labels in the design's order, unexpected countries appended
+      const countryLabels = COUNTRY_ORDER.filter((c) => byCountry[c]);
+      Object.keys(byCountry).forEach((c) => { if (!countryLabels.includes(c)) countryLabels.push(c); });
+      const countryData = countryLabels.map((c) => byCountry[c]);
+      const countryColors = countryLabels.map((c) => COUNTRY_COLOR_MAP[c] || '#9ca3af');
+
       const stateEntries = Object.entries(byState).sort((a, b) => b[1] - a[1]).slice(0, 8);
-      return { countryEntries, stateEntries, rankCounts };
+      return { countryLabels, countryData, countryColors, stateEntries, rankCounts };
     }
 
-    function renderCharts(sites) {
-      if (typeof Chart === 'undefined') return;
-      const { countryEntries, stateEntries, rankCounts } = computeAnalyticsData(sites);
+    function renderRankBars(rankCounts) {
+      if (!rankBarsEl) return;
+      const max = Math.max(1, ...rankCounts);
+      rankBarsEl.innerHTML = RANK_BAR_DEFS.map((d, i) => {
+        const count = rankCounts[i];
+        const pct = (count / max) * 100;
+        return `
+          <div class="rank-row">
+            <span class="rank-label">${d.label}</span>
+            <span class="rank-bar-wrap"><span class="rank-bar" style="width:${pct.toFixed(2)}%;background:${d.color};"></span></span>
+            <span class="rank-count">${count.toLocaleString()}</span>
+          </div>
+        `;
+      }).join('');
+    }
 
-      const cLabels = countryEntries.map((e) => e[0]);
-      const cData = countryEntries.map((e) => e[1]);
+    function renderCharts(data) {
+      if (typeof Chart === 'undefined') return;
+      const { countryLabels, countryData, countryColors, stateEntries } = data;
+
       if (!chartCountry) {
-        chartCountry = new Chart(document.getElementById('chartCountry'), {
+        chartCountry = new Chart(document.getElementById('chartCountry').getContext('2d'), {
           type: 'doughnut',
           data: {
-            labels: cLabels,
+            labels: countryLabels,
             datasets: [{
-              data: cData,
-              backgroundColor: COUNTRY_COLORS,
-              borderColor: '#fafafa',
+              data: countryData,
+              backgroundColor: countryColors,
+              borderColor: '#ffffff',
               borderWidth: 2,
+              hoverOffset: 6
             }]
           },
           options: {
             responsive: true,
             maintainAspectRatio: false,
-            cutout: '55%',
+            cutout: '58%',
+            layout: { padding: 6 },
             plugins: {
               legend: {
-                position: 'right',
-                labels: { boxWidth: 10, boxHeight: 10, padding: 10, font: { size: 11 } }
-              },
-              datalabels: {
-                color: '#1a1a1a',
-                font: { size: 10, weight: '600' },
-                formatter: (value, ctx) => {
-                  const sum = ctx.dataset.data.reduce((a, b) => a + b, 0);
-                  return sum > 0 && value / sum >= 0.05 ? value.toLocaleString() : '';
+                position: 'left',
+                labels: {
+                  font: { size: 11 },
+                  color: '#4b5563',
+                  boxWidth: 10,
+                  boxHeight: 10,
+                  padding: 8,
+                  usePointStyle: true,
+                  pointStyle: 'circle'
                 }
-              }
+              },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => {
+                    const arr = ctx.dataset.data;
+                    const sum = arr.reduce((a, b) => a + b, 0);
+                    const pct = sum > 0 ? ((ctx.parsed / sum) * 100).toFixed(1) : '0.0';
+                    return `${ctx.label}: ${ctx.parsed.toLocaleString()} sites (${pct}%)`;
+                  }
+                }
+              },
+              datalabels: { display: false }
             }
           }
         });
       } else {
-        chartCountry.data.labels = cLabels;
-        chartCountry.data.datasets[0].data = cData;
+        chartCountry.data.labels = countryLabels;
+        chartCountry.data.datasets[0].data = countryData;
+        chartCountry.data.datasets[0].backgroundColor = countryColors;
         chartCountry.update('none');
       }
 
       const sLabels = stateEntries.map((e) => e[0]);
       const sData = stateEntries.map((e) => e[1]);
       if (!chartStates) {
-        chartStates = new Chart(document.getElementById('chartStates'), {
+        chartStates = new Chart(document.getElementById('chartStates').getContext('2d'), {
           type: 'bar',
           data: {
             labels: sLabels,
@@ -1373,24 +1528,34 @@
               data: sData,
               backgroundColor: '#e2b96f',
               borderRadius: 6,
-              barThickness: 13,
+              borderSkipped: false,
+              barThickness: 16
             }]
           },
           options: {
             indexAxis: 'y',
             responsive: true,
             maintainAspectRatio: false,
-            layout: { padding: { right: 34 } },
+            layout: { padding: { right: 26 } },
             scales: {
-              x: { grid: { color: '#eeeeee' }, ticks: { font: { size: 10 } }, beginAtZero: true },
-              y: { grid: { display: false }, ticks: { font: { size: 11 } } }
+              x: { grid: { color: '#eeeeee' }, ticks: { font: { size: 10.5 } }, beginAtZero: true },
+              y: { grid: { display: false }, ticks: { font: { size: 11.5 } } }
             },
             plugins: {
               legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  title: (items) => items[0].label,
+                  label: (ctx) => `${ctx.parsed.x.toLocaleString()} sites`
+                }
+              },
               datalabels: {
-                anchor: 'end', align: 'right',
+                anchor: 'end',
+                align: 'end',
+                offset: 2,
+                clip: false,
                 color: '#6b7280',
-                font: { size: 10, weight: '600' },
+                font: { weight: '700', size: 10.5 },
                 formatter: (v) => v.toLocaleString()
               }
             }
@@ -1401,48 +1566,14 @@
         chartStates.data.datasets[0].data = sData;
         chartStates.update('none');
       }
-
-      if (!chartRank) {
-        chartRank = new Chart(document.getElementById('chartRank'), {
-          type: 'bar',
-          data: {
-            labels: ['Major', 'Important', 'Medium', 'Minor', 'Minimal'],
-            datasets: [{
-              data: rankCounts,
-              backgroundColor: RANK_BAR_COLORS,
-              borderRadius: 6,
-              barThickness: 26,
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            layout: { padding: { top: 18 } },
-            scales: {
-              x: { grid: { display: false }, ticks: { font: { size: 10.5 } } },
-              y: { grid: { color: '#eeeeee' }, ticks: { font: { size: 10 } }, beginAtZero: true }
-            },
-            plugins: {
-              legend: { display: false },
-              datalabels: {
-                anchor: 'end', align: 'end',
-                color: '#6b7280',
-                font: { size: 10, weight: '600' },
-                formatter: (v) => v.toLocaleString()
-              }
-            }
-          }
-        });
-      } else {
-        chartRank.data.datasets[0].data = rankCounts;
-        chartRank.update('none');
-      }
     }
 
     function updateAnalytics() {
       const inView = sitesInView();
       if (apCount) apCount.textContent = inView.length.toLocaleString('en-US');
-      renderCharts(inView);
+      const data = computeAnalyticsData(inView);
+      renderCharts(data);
+      renderRankBars(data.rankCounts);
     }
 
     // ── Refresh labels and analytics when the view changes ───────────────
