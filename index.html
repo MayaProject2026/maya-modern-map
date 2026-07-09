@@ -576,7 +576,7 @@
     <div class="ap-scroll">
       <div class="ap-summary">
         <div class="ap-summary-count" id="apCount">0</div>
-        <div class="ap-summary-label">sites currently visible</div>
+        <div class="ap-summary-label">sites in current view</div>
       </div>
 
       <div class="ap-section">
@@ -839,7 +839,6 @@
       const rankCutoff = labelRankCutoff(zoom);
       const bounds = map.getBounds().pad(0.1);
 
-      // Collect candidates inside the view that pass the rank cutoff
       const candidates = [];
       currentFiltered.forEach((f) => {
         const p = f.properties || {};
@@ -851,10 +850,8 @@
         candidates.push({ f, rank, lat, lng, name: p.name });
       });
 
-      // Higher significance places first, then alphabetical for stability
       candidates.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
 
-      // Greedy placement: skip any label whose box would overlap one already placed
       const placed = [];
       for (const c of candidates) {
         if (placed.length >= 400 && c.rank > 1) continue;
@@ -1011,6 +1008,7 @@
       });
       clearAllViewLayers();
       rebuildCurrentViewLayer();
+      updateAnalytics();
     }
 
     function applyFilters() {
@@ -1093,7 +1091,6 @@
           cluster.zoomToShowLayer(marker, () => marker.openPopup());
           map.flyTo(latlng, Math.max(map.getZoom(), 10), { duration: 0.8 });
         } else {
-          // Major sites live outside the cluster, open directly
           map.flyTo(latlng, Math.max(map.getZoom(), 10), { duration: 0.8 });
           marker.openPopup();
         }
@@ -1271,6 +1268,7 @@
       analyticsPanel.classList.add('open');
       analyticsPanel.setAttribute('aria-hidden', 'false');
       detailsTab.classList.add('hidden');
+      updateAnalytics();
     }
     function closeAnalytics() {
       analyticsPanel.classList.remove('open');
@@ -1280,7 +1278,7 @@
     detailsTab.addEventListener('click', openAnalytics);
     apClose.addEventListener('click', closeAnalytics);
 
-    // ── Analytics charts (Chart.js) ───────────────────────────────────────
+    // ── Analytics charts (Chart.js), scoped to the current map view ──────
     let chartCountry = null;
     let chartStates = null;
     let chartRank = null;
@@ -1294,11 +1292,19 @@
       Chart.defaults.color = '#6b7280';
     }
 
-    function computeAnalyticsData() {
+    function sitesInView() {
+      const bounds = map.getBounds();
+      return currentFiltered.filter((f) => {
+        const [lng, lat] = f.geometry.coordinates;
+        return bounds.contains([lat, lng]);
+      });
+    }
+
+    function computeAnalyticsData(sites) {
       const byCountry = {};
       const byState = {};
       const rankCounts = [0, 0, 0, 0, 0];
-      currentFiltered.forEach((f) => {
+      sites.forEach((f) => {
         const p = f.properties || {};
         const c = p.country || 'Unknown';
         byCountry[c] = (byCountry[c] || 0) + 1;
@@ -1312,9 +1318,9 @@
       return { countryEntries, stateEntries, rankCounts };
     }
 
-    function renderCharts() {
+    function renderCharts(sites) {
       if (typeof Chart === 'undefined') return;
-      const { countryEntries, stateEntries, rankCounts } = computeAnalyticsData();
+      const { countryEntries, stateEntries, rankCounts } = computeAnalyticsData(sites);
 
       const cLabels = countryEntries.map((e) => e[0]);
       const cData = countryEntries.map((e) => e[1]);
@@ -1434,13 +1440,14 @@
     }
 
     function updateAnalytics() {
-      if (apCount) apCount.textContent = currentFiltered.length.toLocaleString('en-US');
-      renderCharts();
+      const inView = sitesInView();
+      if (apCount) apCount.textContent = inView.length.toLocaleString('en-US');
+      renderCharts(inView);
     }
 
-    // ── Refresh labels when zoom or pan changes ───────────────────────────
-    map.on('zoomend', refreshLabels);
-    map.on('moveend', refreshLabels);
+    // ── Refresh labels and analytics when the view changes ───────────────
+    map.on('zoomend', () => { refreshLabels(); updateAnalytics(); });
+    map.on('moveend', () => { refreshLabels(); updateAnalytics(); });
 
     // ── Load GeoJSON and build markers ────────────────────────────────────
     fetch('data/maya_sites.geojson')
