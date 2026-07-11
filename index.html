@@ -570,22 +570,22 @@
         width: 100%;
         border-radius: 18px 18px 0 0;
         padding: 10px 16px calc(14px + env(safe-area-inset-bottom, 0px));
-        max-height: 72vh;
+        max-height: 74vh;
         box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.18);
-        transform: translateY(calc(100% - 122px));
+        transform: translateY(calc(100% - 96px));
         transition: transform 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
       }
       .panel.expanded { transform: translateY(0); }
-      .panel-header { height: 18px; cursor: pointer; }
-      .panel-header::before { top: 6px; width: 44px; }
-      .site-list { max-height: 34vh; }
+      .panel-header { height: 22px; cursor: pointer; }
+      .panel-header::before { top: 8px; width: 48px; height: 5px; }
+      .site-list { max-height: 36vh; }
 
-      .view-toggle { bottom: 134px; left: 12px; }
+      .view-toggle { bottom: 110px; left: 12px; }
       .view-pill { padding: 6px 10px; font-size: 12px; }
 
-      .map-controls-br { bottom: 134px; right: 8px; }
+      .map-controls-br { bottom: 110px; right: 8px; }
 
-      .leaflet-bottom.leaflet-right { bottom: 124px; }
+      .leaflet-bottom.leaflet-right { bottom: 98px; }
 
       .details-tab { padding: 12px 6px; font-size: 11px; letter-spacing: 1px; }
 
@@ -742,10 +742,13 @@
     const HOME_CENTER = [16.5, -89.5];
     const HOME_ZOOM = 6;
 
+    // preferCanvas renders circle markers on a canvas layer instead of SVG,
+    // which keeps thousands of points responsive on mobile GPUs
     const map = L.map('map', {
       center: HOME_CENTER,
       zoom: HOME_ZOOM, minZoom: 3, maxZoom: 18,
       zoomControl: false,
+      preferCanvas: true,
     });
 
     // Zoom controls explicitly placed top right
@@ -1231,12 +1234,14 @@
           map.flyTo(latlng, Math.max(map.getZoom(), 10), { duration: 0.8 });
           marker.openPopup();
         }
+        if (isMobile()) panel.classList.remove('expanded');
       } else if (currentView === "heat" && !opts.skipMapZoom) {
         const feature = allSites.find((f) => f._idx === idx);
         if (feature) {
           const [lng, lat] = feature.geometry.coordinates;
           map.flyTo([lat, lng], Math.max(map.getZoom(), 10), { duration: 0.8 });
         }
+        if (isMobile()) panel.classList.remove('expanded');
       }
     }
 
@@ -1337,13 +1342,12 @@
       }
     });
 
-    // ── Panel drag (desktop) and bottom sheet toggle (mobile) ────────────
+    // ── Panel drag (desktop) and bottom sheet (mobile) ────────────────────
     const panel = document.getElementById('panel');
     const panelHeader = document.getElementById('panelHeader');
     const isMobile = () => window.matchMedia('(max-width: 600px)').matches;
 
     let drag = null;
-    let dragMoved = false;
     function clampToViewport(left, top) {
       const rect = panel.getBoundingClientRect();
       const maxLeft = Math.max(0, window.innerWidth - rect.width);
@@ -1360,13 +1364,11 @@
       const rect = panel.getBoundingClientRect();
       const point = getEventPoint(e);
       drag = { offsetX: point.x - rect.left, offsetY: point.y - rect.top };
-      dragMoved = false;
       panel.classList.add('dragging');
       if (e.cancelable) e.preventDefault();
     }
     function onDragMove(e) {
       if (!drag) return;
-      dragMoved = true;
       const point = getEventPoint(e);
       const next = clampToViewport(point.x - drag.offsetX, point.y - drag.offsetY);
       panel.style.left = next.left + 'px';
@@ -1386,13 +1388,34 @@
     window.addEventListener('touchend', onDragEnd);
     window.addEventListener('touchcancel', onDragEnd);
 
-    // On mobile the header is a tap target that expands or collapses the sheet
+    // Bottom sheet expand and collapse on mobile.
+    // touchend toggles directly (reliable on iOS); the click handler covers
+    // desktop emulators. A short guard prevents the synthetic click from
+    // double-toggling after a touch.
+    let lastSheetToggle = 0;
+    function toggleSheet(force) {
+      const now = Date.now();
+      if (now - lastSheetToggle < 400) return;
+      lastSheetToggle = now;
+      if (typeof force === 'boolean') panel.classList.toggle('expanded', force);
+      else panel.classList.toggle('expanded');
+    }
+    panelHeader.addEventListener('touchend', (e) => {
+      if (!isMobile()) return;
+      e.preventDefault();
+      toggleSheet();
+    });
     panelHeader.addEventListener('click', () => {
       if (!isMobile()) return;
-      panel.classList.toggle('expanded');
+      toggleSheet();
+    });
+    // Tapping anywhere on the collapsed strip opens the sheet
+    panel.addEventListener('click', (e) => {
+      if (!isMobile()) return;
+      if (!panel.classList.contains('expanded')) toggleSheet(true);
     });
     searchEl.addEventListener('focus', () => {
-      if (isMobile()) panel.classList.add('expanded');
+      if (isMobile()) toggleSheet(true);
     });
 
     function handleResize() {
@@ -1621,8 +1644,16 @@
     }
 
     // ── Refresh labels and analytics when the view changes ───────────────
-    map.on('zoomend', () => { refreshLabels(); updateAnalytics(); });
-    map.on('moveend', () => { refreshLabels(); updateAnalytics(); });
+    // Labels update immediately; the chart work is debounced so momentum
+    // panning on mobile stays smooth
+    let analyticsTimer = null;
+    function onViewChanged() {
+      refreshLabels();
+      if (analyticsTimer) clearTimeout(analyticsTimer);
+      analyticsTimer = setTimeout(updateAnalytics, 150);
+    }
+    map.on('zoomend', onViewChanged);
+    map.on('moveend', onViewChanged);
 
     // ── Load GeoJSON and build markers ────────────────────────────────────
     fetch('data/maya_sites.geojson')
