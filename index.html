@@ -561,6 +561,36 @@
       line-height: 1.55;
       margin: 0;
     }
+
+    /* ---------- Feature 17: mobile responsive layout ---------- */
+    @media (max-width: 600px) {
+      .panel {
+        top: auto;
+        left: 0; right: 0; bottom: 0;
+        width: 100%;
+        border-radius: 18px 18px 0 0;
+        padding: 10px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+        max-height: 72vh;
+        box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.18);
+        transform: translateY(calc(100% - 122px));
+        transition: transform 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
+      }
+      .panel.expanded { transform: translateY(0); }
+      .panel-header { height: 18px; cursor: pointer; }
+      .panel-header::before { top: 6px; width: 44px; }
+      .site-list { max-height: 34vh; }
+
+      .view-toggle { bottom: 134px; left: 12px; }
+      .view-pill { padding: 6px 10px; font-size: 12px; }
+
+      .map-controls-br { bottom: 134px; right: 8px; }
+
+      .leaflet-bottom.leaflet-right { bottom: 124px; }
+
+      .details-tab { padding: 12px 6px; font-size: 11px; letter-spacing: 1px; }
+
+      .analytics-panel { width: 100%; max-width: 100%; }
+    }
   </style>
 </head>
 <body>
@@ -569,7 +599,7 @@
   <div class="map-loading" id="loadingIndicator">Loading Maya sites...</div>
 
   <div class="panel" id="panel">
-    <div class="panel-header" aria-label="Drag to move"></div>
+    <div class="panel-header" id="panelHeader" aria-label="Drag to move or tap to expand"></div>
 
     <div class="search-row">
       <div class="search-wrap">
@@ -1264,6 +1294,7 @@
       } else {
         rcHint.style.display = 'block';
         rcReadout.innerHTML = `<strong>0</strong> sites, click the map to begin`;
+        if (isMobile()) panel.classList.add('expanded');
       }
     }
 
@@ -1306,12 +1337,13 @@
       }
     });
 
-    // ── Panel drag ────────────────────────────────────────────────────────
+    // ── Panel drag (desktop) and bottom sheet toggle (mobile) ────────────
     const panel = document.getElementById('panel');
-    const panelHeader = panel.querySelector('.panel-header');
+    const panelHeader = document.getElementById('panelHeader');
     const isMobile = () => window.matchMedia('(max-width: 600px)').matches;
 
     let drag = null;
+    let dragMoved = false;
     function clampToViewport(left, top) {
       const rect = panel.getBoundingClientRect();
       const maxLeft = Math.max(0, window.innerWidth - rect.width);
@@ -1328,11 +1360,13 @@
       const rect = panel.getBoundingClientRect();
       const point = getEventPoint(e);
       drag = { offsetX: point.x - rect.left, offsetY: point.y - rect.top };
+      dragMoved = false;
       panel.classList.add('dragging');
       if (e.cancelable) e.preventDefault();
     }
     function onDragMove(e) {
       if (!drag) return;
+      dragMoved = true;
       const point = getEventPoint(e);
       const next = clampToViewport(point.x - drag.offsetX, point.y - drag.offsetY);
       panel.style.left = next.left + 'px';
@@ -1352,11 +1386,21 @@
     window.addEventListener('touchend', onDragEnd);
     window.addEventListener('touchcancel', onDragEnd);
 
+    // On mobile the header is a tap target that expands or collapses the sheet
+    panelHeader.addEventListener('click', () => {
+      if (!isMobile()) return;
+      panel.classList.toggle('expanded');
+    });
+    searchEl.addEventListener('focus', () => {
+      if (isMobile()) panel.classList.add('expanded');
+    });
+
     function handleResize() {
       if (isMobile()) {
         panel.style.left = ''; panel.style.top = '';
         return;
       }
+      panel.classList.remove('expanded');
       const rect = panel.getBoundingClientRect();
       const next = clampToViewport(rect.left, rect.top);
       panel.style.left = next.left + 'px';
