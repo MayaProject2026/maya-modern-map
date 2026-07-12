@@ -127,6 +127,8 @@
     .panel-header:active { cursor: grabbing; }
     .panel.dragging .panel-header::before { background: var(--gold); }
 
+    .panel-close { display: none; }
+
     .search-row { display: flex; gap: 8px; align-items: stretch; }
     .search-row .search-wrap { flex: 1; }
     .search-wrap { position: relative; }
@@ -441,6 +443,9 @@
     .details-tab:hover { background: var(--gold-soft); padding-right: 12px; }
     .details-tab.hidden { display: none; }
 
+    /* Search tab on the left edge, mobile only */
+    .search-tab { display: none; }
+
     /* ---------- Details panel, matching the original design ---------- */
     .analytics-panel {
       position: fixed;
@@ -562,33 +567,91 @@
       margin: 0;
     }
 
-    /* ---------- Feature 17: mobile responsive layout ---------- */
+    /* Bottom radius bar, mobile only */
+    .radius-bar {
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      z-index: 1050;
+      background: #ffffff;
+      border-radius: 18px 18px 0 0;
+      box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.18);
+      padding: 14px 18px calc(16px + env(safe-area-inset-bottom, 0px));
+      transform: translateY(110%);
+      transition: transform 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
+    }
+    .radius-bar.open { transform: translateY(0); }
+    .rb-top { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+    .rb-title { font-size: 13px; font-weight: 600; color: var(--text); }
+    .rb-km { color: #b07d2a; font-weight: 700; font-variant-numeric: tabular-nums; font-size: 13px; }
+    .rb-close {
+      margin-left: auto;
+      background: var(--chip-bg);
+      border: none; border-radius: 999px;
+      padding: 6px 16px;
+      font-size: 12px; font-weight: 600;
+      color: var(--text); cursor: pointer;
+      font-family: inherit;
+    }
+    .radius-bar input[type="range"] { width: 100%; accent-color: var(--gold); }
+    .rb-readout { margin-top: 8px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .rb-readout strong { color: #1a1a1a; }
+    @media (min-width: 601px) { .radius-bar { display: none !important; } }
+
+    /* ---------- Feature 18: mobile layout with search drawer ---------- */
     @media (max-width: 600px) {
       .panel {
-        top: auto;
-        left: 0; right: 0; bottom: 0;
-        width: 100%;
-        border-radius: 18px 18px 0 0;
-        padding: 10px 16px calc(14px + env(safe-area-inset-bottom, 0px));
-        max-height: 74vh;
-        box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.18);
-        transform: translateY(calc(100% - 96px));
+        top: 0; left: 0; bottom: 0;
+        height: 100%;
+        width: min(85vw, 330px);
+        border-radius: 0 16px 16px 0;
+        padding: 18px 14px calc(16px + env(safe-area-inset-bottom, 0px));
+        transform: translateX(-105%);
         transition: transform 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
+        box-shadow: 4px 0 24px rgba(0, 0, 0, 0.18);
+        z-index: 1040;
       }
-      .panel.expanded { transform: translateY(0); }
-      .panel-header { height: 22px; cursor: pointer; }
-      .panel-header::before { top: 8px; width: 48px; height: 5px; }
-      .site-list { max-height: 36vh; }
+      .panel.open { transform: translateX(0); }
+      .panel-header { display: none; }
+      .panel-close {
+        display: inline-flex;
+        position: absolute;
+        top: 10px; right: 10px;
+        background: transparent;
+        border: none;
+        color: #9ca3af; cursor: pointer;
+        padding: 6px; border-radius: 8px;
+        line-height: 0;
+      }
+      .panel-close svg { width: 18px; height: 18px; }
+      .search-row { margin-top: 18px; }
+      .site-list-wrap { flex: 1; min-height: 0; }
+      .site-list { max-height: 100%; height: 100%; }
 
-      .view-toggle { bottom: 110px; left: 12px; }
+      .search-tab {
+        display: block;
+        position: absolute;
+        left: 0; top: 50%;
+        transform: translateY(-50%);
+        z-index: 1000;
+        background: var(--gold);
+        color: #1a1a1a;
+        border: none; cursor: pointer;
+        padding: 14px 7px;
+        border-radius: 0 10px 10px 0;
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+        font-size: 11px; font-weight: 600;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        box-shadow: 2px 4px 12px rgba(0, 0, 0, 0.18);
+        font-family: inherit;
+      }
+      .search-tab.hidden { display: none; }
+
+      .view-toggle { bottom: 20px; left: 12px; }
       .view-pill { padding: 6px 10px; font-size: 12px; }
-
-      .map-controls-br { bottom: 110px; right: 8px; }
-
-      .leaflet-bottom.leaflet-right { bottom: 98px; }
-
+      .map-controls-br { bottom: 20px; right: 8px; }
       .details-tab { padding: 12px 6px; font-size: 11px; letter-spacing: 1px; }
-
       .analytics-panel { width: 100%; max-width: 100%; }
     }
   </style>
@@ -599,7 +662,13 @@
   <div class="map-loading" id="loadingIndicator">Loading Maya sites...</div>
 
   <div class="panel" id="panel">
-    <div class="panel-header" id="panelHeader" aria-label="Drag to move or tap to expand"></div>
+    <div class="panel-header" id="panelHeader" aria-label="Drag to move"></div>
+    <button class="panel-close" id="panelClose" type="button" aria-label="Close search panel">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    </button>
 
     <div class="search-row">
       <div class="search-wrap">
@@ -635,6 +704,8 @@
       <ul class="site-list" id="siteList"></ul>
     </div>
   </div>
+
+  <button class="search-tab" id="searchTab" type="button" aria-label="Open search and filters">Search</button>
 
   <div class="view-toggle" role="tablist" aria-label="View mode">
     <button class="view-pill active" id="viewPoints" type="button" data-view="points">Points</button>
@@ -705,6 +776,16 @@
       </section>
     </div>
   </aside>
+
+  <div class="radius-bar" id="radiusBar" aria-hidden="true">
+    <div class="rb-top">
+      <span class="rb-title">Radius</span>
+      <span class="rb-km" id="rbKm">50 km</span>
+      <button class="rb-close" id="rbClose" type="button">Done</button>
+    </div>
+    <input type="range" id="rbSlider" min="10" max="500" step="5" value="50">
+    <div class="rb-readout" id="rbReadout"><strong>0</strong> sites, tap the map to set a centre</div>
+  </div>
 
   <div class="map-controls-br">
     <button class="map-icon-btn" id="locateBtn" type="button" title="Find my location" aria-label="Find my location">
@@ -1234,14 +1315,14 @@
           map.flyTo(latlng, Math.max(map.getZoom(), 10), { duration: 0.8 });
           marker.openPopup();
         }
-        if (isMobile()) panel.classList.remove('expanded');
+        if (isMobile()) closePanelMobile();
       } else if (currentView === "heat" && !opts.skipMapZoom) {
         const feature = allSites.find((f) => f._idx === idx);
         if (feature) {
           const [lng, lat] = feature.geometry.coordinates;
           map.flyTo([lat, lng], Math.max(map.getZoom(), 10), { duration: 0.8 });
         }
-        if (isMobile()) panel.classList.remove('expanded');
+        if (isMobile()) closePanelMobile();
       }
     }
 
@@ -1272,6 +1353,7 @@
       b.addEventListener('click', () => setView(b.dataset.view));
     });
 
+    // ── Radius tool ───────────────────────────────────────────────────────
     const radiusBtn = document.getElementById('radiusBtn');
     const radiusControl = document.getElementById('radiusControl');
     const rcSlider = document.getElementById('rcSlider');
@@ -1279,10 +1361,18 @@
     const rcReadout = document.getElementById('rcReadout');
     const rcHint = document.getElementById('rcHint');
 
+    const radiusBar = document.getElementById('radiusBar');
+    const rbSlider = document.getElementById('rbSlider');
+    const rbKm = document.getElementById('rbKm');
+    const rbReadout = document.getElementById('rbReadout');
+    const rbClose = document.getElementById('rbClose');
+
     function updateRadiusReadout() {
       if (!radiusFilter) return;
       const n = currentFiltered.length;
-      rcReadout.innerHTML = `<strong>${n.toLocaleString()}</strong> site${n === 1 ? '' : 's'} within ${radiusFilter.km} km`;
+      const html = `<strong>${n.toLocaleString()}</strong> site${n === 1 ? '' : 's'} within ${radiusFilter.km} km`;
+      rcReadout.innerHTML = html;
+      rbReadout.innerHTML = html;
     }
 
     function setRadiusToolActive(on) {
@@ -1295,20 +1385,33 @@
       if (!on) {
         if (radiusCircle) { map.removeLayer(radiusCircle); radiusCircle = null; }
         radiusFilter = null;
+        radiusBar.classList.remove('open');
+        radiusBar.setAttribute('aria-hidden', 'true');
+        syncMobileTabs();
         applyFilters();
       } else {
         rcHint.style.display = 'block';
         rcReadout.innerHTML = `<strong>0</strong> sites, click the map to begin`;
-        if (isMobile()) panel.classList.add('expanded');
+        if (isMobile()) {
+          closePanelMobile();
+          rbSlider.value = rcSlider.value;
+          rbKm.textContent = rcSlider.value + ' km';
+          rbReadout.innerHTML = `<strong>0</strong> sites, tap the map to set a centre`;
+          radiusBar.classList.add('open');
+          radiusBar.setAttribute('aria-hidden', 'false');
+          syncMobileTabs();
+        }
       }
     }
 
     radiusBtn.addEventListener('click', () => setRadiusToolActive(!radiusToolActive));
+    rbClose.addEventListener('click', () => setRadiusToolActive(false));
 
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         if (radiusToolActive) setRadiusToolActive(false);
         if (analyticsPanel.classList.contains('open')) closeAnalytics();
+        if (isMobile() && panel.classList.contains('open')) closePanelMobile();
       }
     });
 
@@ -1332,20 +1435,45 @@
       drawRadius(e.latlng);
     });
 
-    rcSlider.addEventListener('input', () => {
-      const km = parseInt(rcSlider.value, 10);
+    function applyRadiusKm(km) {
       rcKm.textContent = km + ' km';
+      rbKm.textContent = km + ' km';
       if (radiusCircle && radiusFilter) {
         radiusCircle.setRadius(km * 1000);
         radiusFilter.km = km;
         applyFilters();
       }
+    }
+    rcSlider.addEventListener('input', () => {
+      rbSlider.value = rcSlider.value;
+      applyRadiusKm(parseInt(rcSlider.value, 10));
+    });
+    rbSlider.addEventListener('input', () => {
+      rcSlider.value = rbSlider.value;
+      applyRadiusKm(parseInt(rbSlider.value, 10));
     });
 
-    // ── Panel drag (desktop) and bottom sheet (mobile) ────────────────────
+    // ── Panel: draggable on desktop, slide-in drawer on mobile ───────────
     const panel = document.getElementById('panel');
     const panelHeader = document.getElementById('panelHeader');
+    const panelClose = document.getElementById('panelClose');
+    const searchTab = document.getElementById('searchTab');
     const isMobile = () => window.matchMedia('(max-width: 600px)').matches;
+
+    function syncMobileTabs() {
+      const hide = panel.classList.contains('open') || radiusBar.classList.contains('open');
+      searchTab.classList.toggle('hidden', hide);
+    }
+    function openPanelMobile() {
+      panel.classList.add('open');
+      syncMobileTabs();
+    }
+    function closePanelMobile() {
+      panel.classList.remove('open');
+      syncMobileTabs();
+    }
+    searchTab.addEventListener('click', openPanelMobile);
+    panelClose.addEventListener('click', closePanelMobile);
 
     let drag = null;
     function clampToViewport(left, top) {
@@ -1388,42 +1516,14 @@
     window.addEventListener('touchend', onDragEnd);
     window.addEventListener('touchcancel', onDragEnd);
 
-    // Bottom sheet expand and collapse on mobile.
-    // touchend toggles directly (reliable on iOS); the click handler covers
-    // desktop emulators. A short guard prevents the synthetic click from
-    // double-toggling after a touch.
-    let lastSheetToggle = 0;
-    function toggleSheet(force) {
-      const now = Date.now();
-      if (now - lastSheetToggle < 400) return;
-      lastSheetToggle = now;
-      if (typeof force === 'boolean') panel.classList.toggle('expanded', force);
-      else panel.classList.toggle('expanded');
-    }
-    panelHeader.addEventListener('touchend', (e) => {
-      if (!isMobile()) return;
-      e.preventDefault();
-      toggleSheet();
-    });
-    panelHeader.addEventListener('click', () => {
-      if (!isMobile()) return;
-      toggleSheet();
-    });
-    // Tapping anywhere on the collapsed strip opens the sheet
-    panel.addEventListener('click', (e) => {
-      if (!isMobile()) return;
-      if (!panel.classList.contains('expanded')) toggleSheet(true);
-    });
-    searchEl.addEventListener('focus', () => {
-      if (isMobile()) toggleSheet(true);
-    });
-
     function handleResize() {
       if (isMobile()) {
         panel.style.left = ''; panel.style.top = '';
+        syncMobileTabs();
         return;
       }
-      panel.classList.remove('expanded');
+      panel.classList.remove('open');
+      radiusBar.classList.remove('open');
       const rect = panel.getBoundingClientRect();
       const next = clampToViewport(rect.left, rect.top);
       panel.style.left = next.left + 'px';
@@ -1443,6 +1543,7 @@
       analyticsPanel.classList.add('open');
       analyticsPanel.setAttribute('aria-hidden', 'false');
       detailsTab.classList.add('hidden');
+      if (isMobile()) closePanelMobile();
       updateAnalytics();
     }
     function closeAnalytics() {
