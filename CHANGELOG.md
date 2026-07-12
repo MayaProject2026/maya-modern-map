@@ -2,6 +2,49 @@
 
 A log of significant changes and progress on the Maya Modern Map project.
 
+## 2026-07-12
+
+### Feature 18: Mobile search drawer and bottom radius bar
+
+- On phones the map is now full screen with a gold Search tab on the left edge, mirroring the Details tab on the right
+- Tapping Search slides in a drawer with the search box, rank filters, and the full site list; picking a result closes the drawer and flies to the site
+- Activating the radius tool on mobile closes the drawer and shows a slim bottom bar with the distance slider and live count; Done dismisses it
+- Desktop layout is unchanged
+
+## 2026-07-11
+
+### Feature 17: Mobile responsive layout
+
+- First mobile layout pass introducing a bottom sheet panel sized for small screens
+- Map controls and view pills repositioned to remain reachable above the sheet
+
+### Fix: mobile rendering and interaction
+
+- Switched marker rendering to canvas (Leaflet preferCanvas) so all 5,223 points stay responsive on mobile GPUs during fast pan and zoom
+- Made the sheet toggle reliable on iOS by handling touchend directly with a double toggle guard
+- Debounced analytics recalculation on map movement to keep momentum panning smooth
+
+## 2026-07-09
+
+### Match details panel and home control to the original design
+
+- Rebuilt the Details panel to the design specification: Maya Civilisation title block, introductory text, Sites by Country doughnut with the design colour palette, Top Regions bar chart, Sites by Significance bars, Best Areas to Visit cards, and a data source note
+- Sites by Significance rendered as custom HTML bars that rescale to the sites in the current view
+- Replaced the custom home button with a standard Leaflet bar control using a house glyph, positioned directly under the zoom controls
+
+### Fix: analytics scoped to the current map view (closes issue 4)
+
+- The Details panel counts and all charts now reflect only the sites inside the current viewport
+- Panning and zooming refreshes the analytics live
+
+## 2026-07-08
+
+### Fix: major site visibility and label placement (closes issues 1, 2, and 3)
+
+- Rank 1 sites are no longer clustered; they render as individual larger gold markers at every zoom level so their labels never float without a point
+- Added greedy collision aware label placement: higher significance sites win, overlapping lower rank labels are skipped
+- At zoom 10 and above the rank cutoff is removed so every visible site is labelled where space allows
+
 ## 2026-07-06
 
 ### Feature 16: Analytics charts
