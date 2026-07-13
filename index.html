@@ -540,7 +540,12 @@
       height: 10px;
       overflow: hidden;
     }
-    .rank-bar { height: 100%; border-radius: 6px; transition: width 0.4s ease; }
+    .rank-bar {
+      display: block;
+      height: 100%;
+      border-radius: 6px;
+      transition: width 0.4s ease;
+    }
     .rank-count {
       flex: 0 0 46px;
       text-align: right;
@@ -1616,9 +1621,11 @@
     function renderRankBars(rankCounts) {
       if (!rankBarsEl) return;
       const max = Math.max(1, ...rankCounts);
+      const sqrtMax = Math.sqrt(max);
       rankBarsEl.innerHTML = RANK_BAR_DEFS.map((d, i) => {
         const count = rankCounts[i];
-        const pct = (count / max) * 100;
+        // Square root scale keeps small categories visible next to large ones
+        const pct = count > 0 ? (Math.sqrt(count) / sqrtMax) * 100 : 0;
         return `
           <div class="rank-row">
             <span class="rank-label">${d.label}</span>
