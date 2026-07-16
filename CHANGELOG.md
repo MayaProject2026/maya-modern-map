@@ -2,6 +2,23 @@
 
 A log of significant changes and progress on the Maya Modern Map project.
 
+## 2026-07-14
+
+### Feature 19: Performance pass
+
+- Bubble markers are now built lazily on first use of the Bubbles view instead of at page load, halving upfront marker construction
+- Chart.js and the datalabels plugin now load only when the Details panel is first opened
+- Added preconnect hints for the tile server and CDN origins and a meta description for search engines
+- Added accessibility labels to the search input and both radius sliders
+- Measured with Lighthouse (median of three runs): mobile performance improved from 42 to 55, desktop from 72 to 76, SEO from 91 to 100
+
+## 2026-07-13
+
+### Fix: significance bars
+
+- The Sites by Significance bars rendered empty because the fill element was styled inline; the fill now renders as a block element
+- Bars use a square root scale so small categories such as Major Centre remain visible alongside Minor
+
 ## 2026-07-12
 
 ### Feature 18: Mobile search drawer and bottom radius bar
