@@ -738,7 +738,7 @@
       <!-- Section 1 -->
       <section class="ap-section">
         <h2 class="ap-title">Maya Civilisation</h2>
-        <p class="ap-subtitle">Eastern Archaeological Atlas of Mesoamerica</p>
+        <p class="ap-subtitle">Electronic Atlas of Ancient Maya Sites</p>
         <p class="ap-lede">The Maya civilisation flourished across Mesoamerica for over 3,000 years, leaving behind thousands of archaeological sites spanning modern-day Mexico, Guatemala, Belize, Honduras, and El Salvador. At its peak during the Classic period, the Maya built sophisticated cities, developed a complex writing system, and created advanced astronomical calendars. This atlas documents 5,223 named sites from the EAAMS dataset.</p>
         <p class="ap-live"><strong id="apCount">0</strong> sites in the current view</p>
       </section>
@@ -784,7 +784,7 @@
 
       <!-- Section 6 -->
       <section class="ap-section">
-        <p class="ap-note">Data source: Eastern Archaeological Atlas of Mesoamerica and Sites (EAAMS). Coordinates in WGS84 (EPSG:4326). Site significance ranked 1 to 6 by the original dataset compilers.</p>
+        <p class="ap-note">Data source: Electronic Atlas of Ancient Maya Sites (EAAMS), compiled by Walter Witschey and Clifford Brown. Coordinates in WGS84 (EPSG:4326). Site significance ranked 1 (major centre) to 5 (minimal remains) by the original dataset compilers.</p>
       </section>
     </div>
   </aside>
@@ -985,7 +985,8 @@
     let allSites = [];
     let currentFiltered = [];
     let searchQuery = "";
-    let activeRankMax = Infinity;
+    // Feature 20: a set of individually selected ranks. Empty means show all.
+    let activeRanks = new Set();
     let activeIdx = null;
     let currentView = "points";
     let radiusToolActive = false;
@@ -1167,7 +1168,8 @@
     function passesFilters(feature) {
       if (!matchesQuery(feature, searchQuery)) return false;
       const rank = feature.properties && feature.properties.rank;
-      if (typeof rank === 'number' && rank > activeRankMax) return false;
+      // Feature 20: with ranks selected, a site must match one of them exactly
+      if (activeRanks.size > 0 && !activeRanks.has(rank)) return false;
       if (radiusFilter) {
         const [lng, lat] = feature.geometry.coordinates;
         if (haversineKm(radiusFilter.lat, radiusFilter.lng, lat, lng) > radiusFilter.km) return false;
@@ -1252,26 +1254,32 @@
       if (radiusFilter) updateRadiusReadout();
     }
 
+    // Feature 20: plain-language names for the selected ranks
+    const RANK_PILL_LABELS = { 1: 'Major', 2: 'Important', 3: 'Medium', 4: 'Minor' };
+
     function updateCountLabel() {
       const n = currentFiltered.length;
       const fmt = n.toLocaleString('en-US');
       const el = document.getElementById('countLabel');
+      const noun = `site${n === 1 ? '' : 's'}`;
+
       if (radiusFilter) {
-        el.textContent = `${fmt} site${n === 1 ? '' : 's'} within ${radiusFilter.km} km`;
+        el.textContent = `${fmt} ${noun} within ${radiusFilter.km} km`;
         return;
       }
-      if (!searchQuery && activeRankMax === Infinity) {
-        el.textContent = `${fmt} site${n === 1 ? '' : 's'}`;
-      } else if (!searchQuery) {
-        const label = { 1: 'Major', 2: 'Important+', 3: 'Medium+', 4: 'Minor+' }[activeRankMax] || '';
-        el.textContent = `${fmt} ${label} site${n === 1 ? '' : 's'}`;
-      } else if (n === 0) {
+      if (n === 0) {
         el.textContent = 'No sites found';
-      } else if (n === 1) {
-        el.textContent = '1 site found';
-      } else {
-        el.textContent = `${fmt} sites match`;
+        return;
       }
+      if (activeRanks.size === 0) {
+        el.textContent = searchQuery ? `${fmt} ${noun} match` : `${fmt} ${noun}`;
+        return;
+      }
+      const names = [...activeRanks].sort((a, b) => a - b).map((r) => RANK_PILL_LABELS[r] || `Rank ${r}`);
+      const list = names.length === 1
+        ? names[0]
+        : names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1];
+      el.textContent = `${fmt} ${list} ${noun}`;
     }
 
     const listEl = document.getElementById('siteList');
@@ -1343,21 +1351,18 @@
       applyFilters();
     });
 
+    // Feature 20: each pill toggles its own rank independently
     const rankPills = document.querySelectorAll('.rank-pill');
     rankPills.forEach((pill) => {
       pill.addEventListener('click', () => {
         const r = parseInt(pill.dataset.rank, 10);
-        if (activeRankMax === r) {
-          activeRankMax = Infinity;
-          rankPills.forEach((p) => p.classList.remove('active'));
-        } else {
-          activeRankMax = r;
-          rankPills.forEach((p) => {
-            p.classList.toggle('active', parseInt(p.dataset.rank, 10) === r);
-          });
-        }
+        if (activeRanks.has(r)) activeRanks.delete(r);
+        else activeRanks.add(r);
+        pill.classList.toggle('active', activeRanks.has(r));
+        pill.setAttribute('aria-pressed', activeRanks.has(r) ? 'true' : 'false');
         applyFilters();
       });
+      pill.setAttribute('aria-pressed', 'false');
     });
 
     document.querySelectorAll('.view-pill').forEach((b) => {
