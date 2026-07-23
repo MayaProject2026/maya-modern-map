@@ -375,6 +375,26 @@
     .map-icon-btn.loading svg { animation: locspin 0.9s linear infinite; }
     @keyframes locspin { to { transform: rotate(360deg); } }
 
+    /* Feature 21: share confirmation toast */
+    .share-toast {
+      position: fixed;
+      right: 10px; bottom: 84px;
+      z-index: 1200;
+      background: var(--popup-bg);
+      color: #e8ecf4;
+      font-size: 12px; font-weight: 500;
+      padding: 8px 14px;
+      border-radius: 999px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(226, 185, 111, 0.25);
+      opacity: 0; visibility: hidden;
+      transform: translateY(6px);
+      transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    .share-toast.show { opacity: 1; visibility: visible; transform: translateY(0); }
+
     .layers-wrap { position: relative; display: flex; }
 
     .basemap-popover {
@@ -663,6 +683,7 @@
       .view-toggle { bottom: 20px; left: 12px; }
       .view-pill { padding: 6px 10px; font-size: 12px; }
       .map-controls-br { bottom: 20px; right: 8px; }
+      .share-toast { bottom: 74px; }
       .details-tab { padding: 12px 6px; font-size: 11px; letter-spacing: 1px; }
       .analytics-panel { width: 100%; max-width: 100%; }
     }
@@ -799,7 +820,15 @@
     <div class="rb-readout" id="rbReadout"><strong>0</strong> sites, tap the map to set a centre</div>
   </div>
 
+  <div class="share-toast" id="shareToast" role="status" aria-live="polite"></div>
+
   <div class="map-controls-br">
+    <button class="map-icon-btn" id="shareBtn" type="button" title="Copy a link to this view" aria-label="Copy a link to this view">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10.5 13.5a4.5 4.5 0 0 0 6.36 0l3-3a4.5 4.5 0 0 0-6.36-6.36l-1.5 1.5"></path>
+        <path d="M13.5 10.5a4.5 4.5 0 0 0-6.36 0l-3 3a4.5 4.5 0 0 0 6.36 6.36l1.5-1.5"></path>
+      </svg>
+    </button>
     <button class="map-icon-btn" id="locateBtn" type="button" title="Find my location" aria-label="Find my location">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="7"></circle>
@@ -829,6 +858,49 @@
   <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 
   <script>
+    // ── Feature 21: shareable view state in the URL ───────────────────────
+    // The full state of the map (position, filters, view mode, basemap and
+    // any radius query) is encoded in the URL hash, so a link reproduces
+    // exactly what the sender was looking at.
+    function parseHashState() {
+      const raw = window.location.hash.replace(/^#\/?/, '');
+      const params = new URLSearchParams(raw);
+      const state = {};
+
+      const lat = parseFloat(params.get('lat'));
+      const lng = parseFloat(params.get('lng'));
+      const z = parseInt(params.get('z'), 10);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) state.center = [lat, lng];
+      if (Number.isFinite(z)) state.zoom = z;
+
+      const q = params.get('q');
+      if (q) state.q = q;
+
+      const ranks = params.get('ranks');
+      if (ranks) {
+        state.ranks = ranks.split(',')
+          .map((n) => parseInt(n, 10))
+          .filter((n) => n >= 1 && n <= 5);
+      }
+
+      const view = params.get('view');
+      if (view === 'points' || view === 'bubbles' || view === 'heat') state.view = view;
+
+      const base = params.get('base');
+      if (base) state.base = base;
+
+      const rc = params.get('rc');
+      const rkm = parseInt(params.get('rkm'), 10);
+      if (rc && Number.isFinite(rkm)) {
+        const parts = rc.split(',').map(parseFloat);
+        if (parts.length === 2 && parts.every(Number.isFinite)) {
+          state.radius = { lat: parts[0], lng: parts[1], km: rkm };
+        }
+      }
+      return state;
+    }
+    const initialState = parseHashState();
+
     // ── Initialise the map ─────────────────────────────────────────────────
     const HOME_CENTER = [16.5, -89.5];
     const HOME_ZOOM = 6;
@@ -836,8 +908,9 @@
     // preferCanvas renders circle markers on a canvas layer instead of SVG,
     // which keeps thousands of points responsive on mobile GPUs
     const map = L.map('map', {
-      center: HOME_CENTER,
-      zoom: HOME_ZOOM, minZoom: 3, maxZoom: 18,
+      center: initialState.center || HOME_CENTER,
+      zoom: Number.isFinite(initialState.zoom) ? initialState.zoom : HOME_ZOOM,
+      minZoom: 3, maxZoom: 18,
       zoomControl: false,
       preferCanvas: true,
     });
@@ -889,9 +962,11 @@
         { maxZoom: 19, attribution: "Tiles &copy; Esri" }
       )
     };
-    let activeBasemap = basemaps["OpenStreetMap"];
+    let activeBasemapName = (initialState.base && basemaps[initialState.base])
+      ? initialState.base
+      : "OpenStreetMap";
+    let activeBasemap = basemaps[activeBasemapName];
     activeBasemap.addTo(map);
-    let activeBasemapName = "OpenStreetMap";
 
     const basemapMeta = [
       { name: "OpenStreetMap", sub: "Standard street map" },
@@ -918,6 +993,7 @@
             activeBasemap.addTo(map);
             activeBasemapName = name;
             renderBasemapOptions();
+            scheduleHashUpdate();
           }
           closeBasemapPopover();
         });
@@ -984,11 +1060,11 @@
     // ── Site state ────────────────────────────────────────────────────────
     let allSites = [];
     let currentFiltered = [];
-    let searchQuery = "";
+    let searchQuery = (initialState.q || '').toLowerCase();
     // Feature 20: a set of individually selected ranks. Empty means show all.
-    let activeRanks = new Set();
+    let activeRanks = new Set(initialState.ranks || []);
     let activeIdx = null;
-    let currentView = "points";
+    let currentView = initialState.view || "points";
     let radiusToolActive = false;
     let radiusFilter = null;
     let radiusCircle = null;
@@ -1243,6 +1319,7 @@
       clearAllViewLayers();
       rebuildCurrentViewLayer();
       updateAnalytics();
+      scheduleHashUpdate();
     }
 
     function applyFilters() {
@@ -1252,6 +1329,7 @@
       updateCountLabel();
       updateAnalytics();
       if (radiusFilter) updateRadiusReadout();
+      scheduleHashUpdate();
     }
 
     // Feature 20: plain-language names for the selected ranks
@@ -1346,6 +1424,7 @@
     }
 
     const searchEl = document.getElementById('search');
+    searchEl.value = initialState.q || '';
     searchEl.addEventListener('input', () => {
       searchQuery = searchEl.value.trim().toLowerCase();
       applyFilters();
@@ -1362,11 +1441,17 @@
         pill.setAttribute('aria-pressed', activeRanks.has(r) ? 'true' : 'false');
         applyFilters();
       });
-      pill.setAttribute('aria-pressed', 'false');
+      // Reflect any ranks restored from a shared link
+      const r0 = parseInt(pill.dataset.rank, 10);
+      const on = activeRanks.has(r0);
+      pill.classList.toggle('active', on);
+      pill.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
 
     document.querySelectorAll('.view-pill').forEach((b) => {
       b.addEventListener('click', () => setView(b.dataset.view));
+      // Reflect a view mode restored from a shared link
+      b.classList.toggle('active', b.dataset.view === currentView);
     });
 
     // ── Radius tool ───────────────────────────────────────────────────────
@@ -1467,6 +1552,73 @@
     rbSlider.addEventListener('input', () => {
       rcSlider.value = rbSlider.value;
       applyRadiusKm(parseInt(rbSlider.value, 10));
+    });
+
+    // ── Feature 21: write state to the URL and copy it on request ────────
+    let hashTimer = null;
+    function scheduleHashUpdate() {
+      if (hashTimer) clearTimeout(hashTimer);
+      hashTimer = setTimeout(writeStateToHash, 250);
+    }
+
+    function writeStateToHash() {
+      const c = map.getCenter();
+      const params = new URLSearchParams();
+      params.set('lat', c.lat.toFixed(4));
+      params.set('lng', c.lng.toFixed(4));
+      params.set('z', String(map.getZoom()));
+      if (searchQuery) params.set('q', searchQuery);
+      if (activeRanks.size > 0) params.set('ranks', [...activeRanks].sort((a, b) => a - b).join(','));
+      if (currentView !== 'points') params.set('view', currentView);
+      if (activeBasemapName !== 'OpenStreetMap') params.set('base', activeBasemapName);
+      if (radiusFilter) {
+        params.set('rc', radiusFilter.lat.toFixed(4) + ',' + radiusFilter.lng.toFixed(4));
+        params.set('rkm', String(radiusFilter.km));
+      }
+      const newHash = '#' + params.toString();
+      if (newHash !== window.location.hash) {
+        // replaceState keeps the browser history clean while panning
+        history.replaceState(null, '', window.location.pathname + window.location.search + newHash);
+      }
+    }
+
+    const shareBtn = document.getElementById('shareBtn');
+    const shareToast = document.getElementById('shareToast');
+    let toastTimer = null;
+
+    function showToast(message) {
+      shareToast.textContent = message;
+      shareToast.classList.add('show');
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => shareToast.classList.remove('show'), 2400);
+    }
+
+    function copyTextFallback(text) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '-1000px';
+      document.body.appendChild(ta);
+      ta.select();
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
+      document.body.removeChild(ta);
+      return ok;
+    }
+
+    shareBtn.addEventListener('click', () => {
+      writeStateToHash();
+      const url = window.location.href;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url)
+          .then(() => showToast('Link to this view copied'))
+          .catch(() => {
+            showToast(copyTextFallback(url) ? 'Link to this view copied' : 'Copy the link from the address bar');
+          });
+      } else {
+        showToast(copyTextFallback(url) ? 'Link to this view copied' : 'Copy the link from the address bar');
+      }
     });
 
     // ── Panel: draggable on desktop, slide-in drawer on mobile ───────────
@@ -1789,6 +1941,7 @@
       refreshLabels();
       if (analyticsTimer) clearTimeout(analyticsTimer);
       analyticsTimer = setTimeout(updateAnalytics, 150);
+      scheduleHashUpdate();
     }
     map.on('zoomend', onViewChanged);
     map.on('moveend', onViewChanged);
@@ -1814,12 +1967,18 @@
           makePointMarker(feature, feature._idx);
         });
 
-        currentFiltered = allSites.slice();
-        rebuildCurrentViewLayer();
+        // applyFilters honours any search or rank state restored from a link
+        applyFilters();
 
-        renderList();
-        updateCountLabel();
-        updateAnalytics();
+        // Feature 21: restore a shared radius query once the data is present
+        if (initialState.radius) {
+          rcSlider.value = String(initialState.radius.km);
+          rbSlider.value = String(initialState.radius.km);
+          rcKm.textContent = initialState.radius.km + ' km';
+          rbKm.textContent = initialState.radius.km + ' km';
+          setRadiusToolActive(true);
+          drawRadius(L.latLng(initialState.radius.lat, initialState.radius.lng));
+        }
 
         const loading = document.getElementById('loadingIndicator');
         if (loading) {
