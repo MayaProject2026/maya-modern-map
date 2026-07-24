@@ -906,13 +906,17 @@
     const HOME_ZOOM = 6;
 
     // preferCanvas renders circle markers on a canvas layer instead of SVG,
-    // which keeps thousands of points responsive on mobile GPUs
+    // which keeps thousands of points responsive on mobile GPUs.
+    // Feature 22: the canvas renderer is created explicitly so a click
+    // tolerance can be set, widening the hit area of small markers for both
+    // mouse and touch input.
     const map = L.map('map', {
       center: initialState.center || HOME_CENTER,
       zoom: Number.isFinite(initialState.zoom) ? initialState.zoom : HOME_ZOOM,
       minZoom: 3, maxZoom: 18,
       zoomControl: false,
       preferCanvas: true,
+      renderer: L.canvas({ tolerance: 5 }),
     });
 
     // Zoom controls explicitly placed top right
@@ -1118,6 +1122,19 @@
       return 10.5;
     }
 
+    // Feature 22: the marker representing a site in the active view
+    function currentMarkerFor(feature) {
+      if (currentView === 'bubbles') return bubbleMarkerByIdx.get(feature._idx);
+      return pointMarkerByIdx.get(feature._idx);
+    }
+
+    // Feature 22: a site drawn as its own marker rather than folded into a
+    // cluster is on the map directly, so it always deserves a label
+    function isRenderedIndividually(feature) {
+      const m = currentMarkerFor(feature);
+      return !!m && map.hasLayer(m);
+    }
+
     function makeLabelMarker(feature) {
       const p = feature.properties || {};
       const [lng, lat] = feature.geometry.coordinates;
@@ -1151,10 +1168,12 @@
       currentFiltered.forEach((f) => {
         const p = f.properties || {};
         if (!p.name) return;
-        const rank = typeof p.rank === 'number' ? p.rank : 4;
-        if (rank > rankCutoff) return;
         const [lng, lat] = f.geometry.coordinates;
         if (!bounds.contains([lat, lng])) return;
+        const rank = typeof p.rank === 'number' ? p.rank : 4;
+        // A site qualifies if its rank passes the zoom cutoff, or if it is
+        // currently drawn as an individual marker instead of inside a cluster
+        if (rank > rankCutoff && !isRenderedIndividually(f)) return;
         candidates.push({ f, rank, lat, lng, name: p.name });
       });
 
@@ -1946,6 +1965,11 @@
     map.on('zoomend', onViewChanged);
     map.on('moveend', onViewChanged);
 
+    // Feature 22: clustering settles asynchronously, so labels are recomputed
+    // once the cluster layout has finished changing
+    pointsCluster.on('animationend', refreshLabels);
+    bubblesCluster.on('animationend', refreshLabels);
+
     // ── Load GeoJSON and build markers ────────────────────────────────────
     fetch('data/maya_sites.geojson')
       .then(response => {
@@ -1979,6 +2003,10 @@
           setRadiusToolActive(true);
           drawRadius(L.latLng(initialState.radius.lat, initialState.radius.lng));
         }
+
+        // Feature 22: chunked cluster loading finishes after this callback,
+        // so labels are recomputed once the first layout has settled
+        setTimeout(refreshLabels, 400);
 
         const loading = document.getElementById('loadingIndicator');
         if (loading) {
