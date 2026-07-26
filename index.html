@@ -427,6 +427,9 @@
     .bm-option.active .bm-name { color: #b07d2a; font-weight: 600; }
     .bm-option .bm-sub { font-size: 11px; color: var(--muted); line-height: 1.2; font-style: italic; }
 
+    /* Feature 23: divider and rivers toggle inside the layers popover */
+    .bm-divider { height: 1px; background: #eeeeee; margin: 5px 8px; }
+
     .user-loc-icon { background: transparent; border: none; }
     .user-loc-dot {
       position: relative; width: 16px; height: 16px;
@@ -805,7 +808,7 @@
 
       <!-- Section 6 -->
       <section class="ap-section">
-        <p class="ap-note">Data source: Electronic Atlas of Ancient Maya Sites (EAAMS), compiled by Walter Witschey and Clifford Brown. Coordinates in WGS84 (EPSG:4326). Site significance ranked 1 (major centre) to 5 (minimal remains) by the original dataset compilers.</p>
+        <p class="ap-note">Data source: Electronic Atlas of Ancient Maya Sites (EAAMS), compiled by Walter Witschey and Clifford Brown. Coordinates in WGS84 (EPSG:4326). Site significance ranked 1 (major centre) to 5 (minimal remains) by the original dataset compilers. River network derived from HydroRIVERS (HydroSHEDS), Lehner and Grill (2013).</p>
       </section>
     </div>
   </aside>
@@ -859,9 +862,9 @@
 
   <script>
     // ── Feature 21: shareable view state in the URL ───────────────────────
-    // The full state of the map (position, filters, view mode, basemap and
-    // any radius query) is encoded in the URL hash, so a link reproduces
-    // exactly what the sender was looking at.
+    // The full state of the map (position, filters, view mode, basemap,
+    // rivers on/off, and any radius query) is encoded in the URL hash, so a
+    // link reproduces exactly what the sender was looking at.
     function parseHashState() {
       const raw = window.location.hash.replace(/^#\/?/, '');
       const params = new URLSearchParams(raw);
@@ -889,6 +892,11 @@
       const base = params.get('base');
       if (base) state.base = base;
 
+      // Feature 23: rivers on/off (rivers default ON, so only "0" is stored)
+      const rivers = params.get('rivers');
+      if (rivers === '0') state.rivers = false;
+      else if (rivers === '1') state.rivers = true;
+
       const rc = params.get('rc');
       const rkm = parseInt(params.get('rkm'), 10);
       if (rc && Number.isFinite(rkm)) {
@@ -908,8 +916,7 @@
     // preferCanvas renders circle markers on a canvas layer instead of SVG,
     // which keeps thousands of points responsive on mobile GPUs.
     // Feature 22: the canvas renderer is created explicitly so a click
-    // tolerance can be set, widening the hit area of small markers for both
-    // mouse and touch input.
+    // tolerance can be set, widening the hit area of small markers.
     const map = L.map('map', {
       center: initialState.center || HOME_CENTER,
       zoom: Number.isFinite(initialState.zoom) ? initialState.zoom : HOME_ZOOM,
@@ -942,6 +949,11 @@
       }
     });
     map.addControl(new HomeControl());
+
+    // Feature 23: dedicated pane for the river layer, above basemap tiles
+    // but below the site markers and labels
+    map.createPane('riversPane');
+    map.getPane('riversPane').style.zIndex = 350;
 
     map.createPane('labelsPane');
     map.getPane('labelsPane').style.zIndex = 640;
@@ -983,8 +995,51 @@
     const basemapPopover = document.getElementById("basemapPopover");
     const layersBtn = document.getElementById("layersBtn");
 
+    // Feature 23: rivers layer state (on by default)
+    let riversOn = (initialState.rivers === undefined) ? true : initialState.rivers;
+    let riverLayer = null;
+    let riversLoaded = false;
+    let riversLoading = false;
+
+    // Draw bigger rivers with a thicker line. ord: 3 = biggest ... 6 = small.
+    function riverStyle(feature) {
+      const ord = (feature.properties && feature.properties.ord) || 6;
+      const weight = ord <= 3 ? 2.4 : ord === 4 ? 1.8 : ord === 5 ? 1.2 : 0.7;
+      return { color: '#4a90d9', weight, opacity: 0.85 };
+    }
+
+    function loadRivers() {
+      if (riversLoaded || riversLoading) return Promise.resolve();
+      riversLoading = true;
+      return fetch('data/maya_rivers.geojson')
+        .then((r) => { if (!r.ok) throw new Error('rivers ' + r.status); return r.json(); })
+        .then((geo) => {
+          riverLayer = L.geoJSON(geo, {
+            pane: 'riversPane',
+            style: riverStyle,
+            interactive: false
+          });
+          riversLoaded = true;
+          riversLoading = false;
+          if (riversOn) riverLayer.addTo(map);
+        })
+        .catch((e) => { riversLoading = false; console.error('River layer failed to load:', e); });
+    }
+
+    function setRivers(on) {
+      riversOn = on;
+      if (on) {
+        if (!riversLoaded) loadRivers();
+        else if (!map.hasLayer(riverLayer)) riverLayer.addTo(map);
+      } else if (riverLayer && map.hasLayer(riverLayer)) {
+        map.removeLayer(riverLayer);
+      }
+      renderBasemapOptions();
+      scheduleHashUpdate();
+    }
+
     function renderBasemapOptions() {
-      basemapPopover.querySelectorAll(".bm-option").forEach((el) => el.remove());
+      basemapPopover.innerHTML = '';
       basemapMeta.forEach(({ name, sub }) => {
         const opt = document.createElement("button");
         opt.type = "button";
@@ -1003,6 +1058,18 @@
         });
         basemapPopover.appendChild(opt);
       });
+
+      // Feature 23: rivers toggle beneath the basemap list
+      const divider = document.createElement('div');
+      divider.className = 'bm-divider';
+      basemapPopover.appendChild(divider);
+
+      const riversOpt = document.createElement('button');
+      riversOpt.type = 'button';
+      riversOpt.className = 'bm-option' + (riversOn ? ' active' : '');
+      riversOpt.innerHTML = `<span class="bm-check">${CHECK_SVG}</span><span class="bm-text"><span class="bm-name">Rivers</span><span class="bm-sub">Show river network</span></span>`;
+      riversOpt.addEventListener('click', () => setRivers(!riversOn));
+      basemapPopover.appendChild(riversOpt);
     }
     function openBasemapPopover() { basemapPopover.classList.add("open"); layersBtn.classList.add("active"); }
     function closeBasemapPopover() { basemapPopover.classList.remove("open"); layersBtn.classList.remove("active"); }
@@ -1590,6 +1657,8 @@
       if (activeRanks.size > 0) params.set('ranks', [...activeRanks].sort((a, b) => a - b).join(','));
       if (currentView !== 'points') params.set('view', currentView);
       if (activeBasemapName !== 'OpenStreetMap') params.set('base', activeBasemapName);
+      // Feature 23: rivers default on, so only record when turned off
+      if (!riversOn) params.set('rivers', '0');
       if (radiusFilter) {
         params.set('rc', radiusFilter.lat.toFixed(4) + ',' + radiusFilter.lng.toFixed(4));
         params.set('rkm', String(radiusFilter.km));
@@ -1993,6 +2062,9 @@
 
         // applyFilters honours any search or rank state restored from a link
         applyFilters();
+
+        // Feature 23: load the river layer (on by default)
+        if (riversOn) loadRivers();
 
         // Feature 21: restore a shared radius query once the data is present
         if (initialState.radius) {
