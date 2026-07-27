@@ -862,9 +862,6 @@
 
   <script>
     // ── Feature 21: shareable view state in the URL ───────────────────────
-    // The full state of the map (position, filters, view mode, basemap,
-    // rivers on/off, and any radius query) is encoded in the URL hash, so a
-    // link reproduces exactly what the sender was looking at.
     function parseHashState() {
       const raw = window.location.hash.replace(/^#\/?/, '');
       const params = new URLSearchParams(raw);
@@ -892,7 +889,6 @@
       const base = params.get('base');
       if (base) state.base = base;
 
-      // Feature 23: rivers on/off (rivers default ON, so only "0" is stored)
       const rivers = params.get('rivers');
       if (rivers === '0') state.rivers = false;
       else if (rivers === '1') state.rivers = true;
@@ -913,10 +909,6 @@
     const HOME_CENTER = [16.5, -89.5];
     const HOME_ZOOM = 6;
 
-    // preferCanvas renders circle markers on a canvas layer instead of SVG,
-    // which keeps thousands of points responsive on mobile GPUs.
-    // Feature 22: the canvas renderer is created explicitly so a click
-    // tolerance can be set, widening the hit area of small markers.
     const map = L.map('map', {
       center: initialState.center || HOME_CENTER,
       zoom: Number.isFinite(initialState.zoom) ? initialState.zoom : HOME_ZOOM,
@@ -926,10 +918,8 @@
       renderer: L.canvas({ tolerance: 5 }),
     });
 
-    // Zoom controls explicitly placed top right
     L.control.zoom({ position: 'topright' }).addTo(map);
 
-    // Home button, also top right, under the zoom stack
     const HomeControl = L.Control.extend({
       options: { position: 'topright' },
       onAdd: function () {
@@ -995,36 +985,46 @@
     const basemapPopover = document.getElementById("basemapPopover");
     const layersBtn = document.getElementById("layersBtn");
 
-    // Feature 23: rivers layer state (on by default), now zoom-aware.
-    // ord: 3 = biggest rivers ... 6 = small streams. At each zoom we only
-    // draw rivers whose order is significant enough, so the overview stays
-    // clean and the full network reveals as you zoom toward the sites.
+    // Feature 23: rivers layer state (on by default), zoom-aware.
+    // The layer now contains only the smaller streams (ord 5-6) that the
+    // basemaps do not draw; the big rivers come from the basemap itself.
+    // ord: 5 = medium stream, 6 = small stream.
     let riversOn = (initialState.rivers === undefined) ? true : initialState.rivers;
-    let allRiverFeatures = [];   // every river feature from the file
-    let riverLayer = null;       // the currently displayed subset
+    let allRiverFeatures = [];
+    let riverLayer = null;
     let riversLoaded = false;
     let riversLoading = false;
 
-    // Balanced thresholds: the maximum ord (smallest river) shown at a zoom.
-    // Lower zoom = only big rivers; higher zoom = everything.
+    // With only small streams in the file, show the medium ones (ord 5) from
+    // a moderate zoom, and the smallest (ord 6) as you get closer to sites.
+    // Below zoom 8 the streams would be visual clutter over the whole region,
+    // so nothing is drawn there and the basemap's own rivers carry the view.
     function maxRiverOrdForZoom(zoom) {
-      if (zoom <= 6)  return 3;   // region view: only the biggest rivers
-      if (zoom === 7) return 4;
-      if (zoom === 8) return 5;
-      return 6;                    // zoom 9+: full network incl. small streams
+      if (zoom <= 7)  return 0;   // region view: rely on basemap rivers only
+      if (zoom === 8) return 5;   // medium streams begin
+      if (zoom === 9) return 5;
+      return 6;                    // zoom 10+: full small-stream detail
     }
 
+    // Finer weights than before, since these are small watercourses meant to
+    // sit alongside the basemap's own river rendering
     function riverStyle(feature) {
       const ord = (feature.properties && feature.properties.ord) || 6;
-      const weight = ord <= 3 ? 2.4 : ord === 4 ? 1.8 : ord === 5 ? 1.2 : 0.7;
-      return { color: '#4a90d9', weight, opacity: 0.85 };
+      const weight = ord === 5 ? 1.3 : 0.8;
+      return { color: '#4a90d9', weight, opacity: 0.8 };
     }
 
-    // Rebuild the river layer to match the current zoom's detail level
     let lastRiverMaxOrd = null;
     function refreshRivers() {
       if (!riversLoaded || !riversOn) return;
       const maxOrd = maxRiverOrdForZoom(map.getZoom());
+
+      // At low zoom we show no streams at all; drop the layer if present
+      if (maxOrd === 0) {
+        if (riverLayer && map.hasLayer(riverLayer)) map.removeLayer(riverLayer);
+        lastRiverMaxOrd = 0;
+        return;
+      }
       if (maxOrd === lastRiverMaxOrd && riverLayer && map.hasLayer(riverLayer)) return;
       lastRiverMaxOrd = maxOrd;
 
@@ -1086,7 +1086,6 @@
         basemapPopover.appendChild(opt);
       });
 
-      // Feature 23: rivers toggle beneath the basemap list
       const divider = document.createElement('div');
       divider.className = 'bm-divider';
       basemapPopover.appendChild(divider);
@@ -1094,7 +1093,7 @@
       const riversOpt = document.createElement('button');
       riversOpt.type = 'button';
       riversOpt.className = 'bm-option' + (riversOn ? ' active' : '');
-      riversOpt.innerHTML = `<span class="bm-check">${CHECK_SVG}</span><span class="bm-text"><span class="bm-name">Rivers</span><span class="bm-sub">More detail as you zoom in</span></span>`;
+      riversOpt.innerHTML = `<span class="bm-check">${CHECK_SVG}</span><span class="bm-text"><span class="bm-name">Streams</span><span class="bm-sub">Smaller watercourses as you zoom in</span></span>`;
       riversOpt.addEventListener('click', () => setRivers(!riversOn));
       basemapPopover.appendChild(riversOpt);
     }
@@ -1159,7 +1158,6 @@
     let allSites = [];
     let currentFiltered = [];
     let searchQuery = (initialState.q || '').toLowerCase();
-    // Feature 20: a set of individually selected ranks. Empty means show all.
     let activeRanks = new Set(initialState.ranks || []);
     let activeIdx = null;
     let currentView = initialState.view || "points";
@@ -1192,7 +1190,6 @@
       }
     });
 
-    // Major (rank 1) sites are never clustered so they stay visible at every zoom
     const majorPointsLayer = L.layerGroup();
     const majorBubblesLayer = L.layerGroup();
 
@@ -1216,17 +1213,15 @@
       return 10.5;
     }
 
-    // Feature 22: the marker representing a site in the active view
-    function currentMarkerFor(feature) {
-      if (currentView === 'bubbles') return bubbleMarkerByIdx.get(feature._idx);
-      return pointMarkerByIdx.get(feature._idx);
-    }
-
-    // Feature 22: a site drawn as its own marker rather than folded into a
-    // cluster is on the map directly, so it always deserves a label
-    function isRenderedIndividually(feature) {
-      const m = currentMarkerFor(feature);
-      return !!m && map.hasLayer(m);
+    // Feature 22 (fixed): a label is only shown for a site that is actually
+    // on the map as its own clickable marker right now. This is the single
+    // source of truth shared by both the marker and its label, so a label can
+    // never appear without a circle beneath it.
+    function activeMarkerFor(feature) {
+      const m = (currentView === 'bubbles')
+        ? bubbleMarkerByIdx.get(feature._idx)
+        : pointMarkerByIdx.get(feature._idx);
+      return (m && map.hasLayer(m)) ? m : null;
     }
 
     function makeLabelMarker(feature) {
@@ -1265,9 +1260,11 @@
         const [lng, lat] = f.geometry.coordinates;
         if (!bounds.contains([lat, lng])) return;
         const rank = typeof p.rank === 'number' ? p.rank : 4;
-        // A site qualifies if its rank passes the zoom cutoff, or if it is
-        // currently drawn as an individual marker instead of inside a cluster
-        if (rank > rankCutoff && !isRenderedIndividually(f)) return;
+        // A site is a labelling candidate only if BOTH: its rank passes the
+        // zoom cutoff (so we do not flood the map), AND it is currently drawn
+        // as its own clickable marker (so the label always has a circle).
+        if (rank > rankCutoff) return;
+        if (!activeMarkerFor(f)) return;
         candidates.push({ f, rank, lat, lng, name: p.name });
       });
 
@@ -1357,7 +1354,6 @@
     function passesFilters(feature) {
       if (!matchesQuery(feature, searchQuery)) return false;
       const rank = feature.properties && feature.properties.rank;
-      // Feature 20: with ranks selected, a site must match one of them exactly
       if (activeRanks.size > 0 && !activeRanks.has(rank)) return false;
       if (radiusFilter) {
         const [lng, lat] = feature.geometry.coordinates;
@@ -1395,7 +1391,6 @@
         majorBubblesLayer.clearLayers();
         const clustered = [];
         currentFiltered.forEach((f) => {
-          // Bubble markers are built lazily the first time this view is used
           let m = bubbleMarkerByIdx.get(f._idx);
           if (!m) m = makeBubbleMarker(f, f._idx);
           const rank = f.properties && f.properties.rank;
@@ -1445,7 +1440,6 @@
       scheduleHashUpdate();
     }
 
-    // Feature 20: plain-language names for the selected ranks
     const RANK_PILL_LABELS = { 1: 'Major', 2: 'Important', 3: 'Medium', 4: 'Minor' };
 
     function updateCountLabel() {
@@ -1543,7 +1537,6 @@
       applyFilters();
     });
 
-    // Feature 20: each pill toggles its own rank independently
     const rankPills = document.querySelectorAll('.rank-pill');
     rankPills.forEach((pill) => {
       pill.addEventListener('click', () => {
@@ -1554,7 +1547,6 @@
         pill.setAttribute('aria-pressed', activeRanks.has(r) ? 'true' : 'false');
         applyFilters();
       });
-      // Reflect any ranks restored from a shared link
       const r0 = parseInt(pill.dataset.rank, 10);
       const on = activeRanks.has(r0);
       pill.classList.toggle('active', on);
@@ -1563,7 +1555,6 @@
 
     document.querySelectorAll('.view-pill').forEach((b) => {
       b.addEventListener('click', () => setView(b.dataset.view));
-      // Reflect a view mode restored from a shared link
       b.classList.toggle('active', b.dataset.view === currentView);
     });
 
@@ -1684,7 +1675,6 @@
       if (activeRanks.size > 0) params.set('ranks', [...activeRanks].sort((a, b) => a - b).join(','));
       if (currentView !== 'points') params.set('view', currentView);
       if (activeBasemapName !== 'OpenStreetMap') params.set('base', activeBasemapName);
-      // Feature 23: rivers default on, so only record when turned off
       if (!riversOn) params.set('rivers', '0');
       if (radiusFilter) {
         params.set('rc', radiusFilter.lat.toFixed(4) + ',' + radiusFilter.lng.toFixed(4));
@@ -1692,7 +1682,6 @@
       }
       const newHash = '#' + params.toString();
       if (newHash !== window.location.hash) {
-        // replaceState keeps the browser history clean while panning
         history.replaceState(null, '', window.location.pathname + window.location.search + newHash);
       }
     }
@@ -1866,7 +1855,6 @@
     let chartCountry = null;
     let chartStates = null;
 
-    // Country order and colours from the original design
     const COUNTRY_ORDER = ['Mexico', 'Guatemala', 'Belize', 'Honduras', 'El Salvador'];
     const COUNTRY_COLOR_MAP = {
       'Mexico':      '#e2b96f',
@@ -1905,7 +1893,6 @@
         if (r >= 1 && r <= 5) rankCounts[r - 1] += 1;
       });
 
-      // Country labels in the design's order, unexpected countries appended
       const countryLabels = COUNTRY_ORDER.filter((c) => byCountry[c]);
       Object.keys(byCountry).forEach((c) => { if (!countryLabels.includes(c)) countryLabels.push(c); });
       const countryData = countryLabels.map((c) => byCountry[c]);
@@ -1921,7 +1908,6 @@
       const sqrtMax = Math.sqrt(max);
       rankBarsEl.innerHTML = RANK_BAR_DEFS.map((d, i) => {
         const count = rankCounts[i];
-        // Square root scale keeps small categories visible next to large ones
         const pct = count > 0 ? (Math.sqrt(count) / sqrtMax) * 100 : 0;
         return `
           <div class="rank-row">
@@ -2049,8 +2035,6 @@
     }
 
     // ── Refresh labels, analytics and rivers when the view changes ───────
-    // Labels and rivers update immediately; the chart work is debounced so
-    // momentum panning on mobile stays smooth
     let analyticsTimer = null;
     function onViewChanged() {
       refreshLabels();
@@ -2063,7 +2047,8 @@
     map.on('moveend', onViewChanged);
 
     // Feature 22: clustering settles asynchronously, so labels are recomputed
-    // once the cluster layout has finished changing
+    // once the cluster layout has finished changing (this is what makes the
+    // label/marker pairing correct as clusters expand and collapse)
     pointsCluster.on('animationend', refreshLabels);
     bubblesCluster.on('animationend', refreshLabels);
 
@@ -2082,19 +2067,14 @@
         });
         allSites = features.map((f, i) => { f._idx = i; return f; });
 
-        // Only point markers are built up front; bubble markers are created
-        // lazily when the Bubbles view is first opened
         allSites.forEach((feature) => {
           makePointMarker(feature, feature._idx);
         });
 
-        // applyFilters honours any search or rank state restored from a link
         applyFilters();
 
-        // Feature 23: load the river layer (on by default, zoom-aware)
         if (riversOn) loadRivers();
 
-        // Feature 21: restore a shared radius query once the data is present
         if (initialState.radius) {
           rcSlider.value = String(initialState.radius.km);
           rbSlider.value = String(initialState.radius.km);
@@ -2104,8 +2084,6 @@
           drawRadius(L.latLng(initialState.radius.lat, initialState.radius.lng));
         }
 
-        // Feature 22: chunked cluster loading finishes after this callback,
-        // so labels are recomputed once the first layout has settled
         setTimeout(refreshLabels, 400);
 
         const loading = document.getElementById('loadingIndicator');
