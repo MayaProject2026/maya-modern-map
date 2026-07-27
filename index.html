@@ -995,17 +995,47 @@
     const basemapPopover = document.getElementById("basemapPopover");
     const layersBtn = document.getElementById("layersBtn");
 
-    // Feature 23: rivers layer state (on by default)
+    // Feature 23: rivers layer state (on by default), now zoom-aware.
+    // ord: 3 = biggest rivers ... 6 = small streams. At each zoom we only
+    // draw rivers whose order is significant enough, so the overview stays
+    // clean and the full network reveals as you zoom toward the sites.
     let riversOn = (initialState.rivers === undefined) ? true : initialState.rivers;
-    let riverLayer = null;
+    let allRiverFeatures = [];   // every river feature from the file
+    let riverLayer = null;       // the currently displayed subset
     let riversLoaded = false;
     let riversLoading = false;
 
-    // Draw bigger rivers with a thicker line. ord: 3 = biggest ... 6 = small.
+    // Balanced thresholds: the maximum ord (smallest river) shown at a zoom.
+    // Lower zoom = only big rivers; higher zoom = everything.
+    function maxRiverOrdForZoom(zoom) {
+      if (zoom <= 6)  return 3;   // region view: only the biggest rivers
+      if (zoom === 7) return 4;
+      if (zoom === 8) return 5;
+      return 6;                    // zoom 9+: full network incl. small streams
+    }
+
     function riverStyle(feature) {
       const ord = (feature.properties && feature.properties.ord) || 6;
       const weight = ord <= 3 ? 2.4 : ord === 4 ? 1.8 : ord === 5 ? 1.2 : 0.7;
       return { color: '#4a90d9', weight, opacity: 0.85 };
+    }
+
+    // Rebuild the river layer to match the current zoom's detail level
+    let lastRiverMaxOrd = null;
+    function refreshRivers() {
+      if (!riversLoaded || !riversOn) return;
+      const maxOrd = maxRiverOrdForZoom(map.getZoom());
+      if (maxOrd === lastRiverMaxOrd && riverLayer && map.hasLayer(riverLayer)) return;
+      lastRiverMaxOrd = maxOrd;
+
+      if (riverLayer && map.hasLayer(riverLayer)) map.removeLayer(riverLayer);
+      const subset = allRiverFeatures.filter((f) => (f.properties.ord || 6) <= maxOrd);
+      riverLayer = L.geoJSON(subset, {
+        pane: 'riversPane',
+        style: riverStyle,
+        interactive: false
+      });
+      riverLayer.addTo(map);
     }
 
     function loadRivers() {
@@ -1014,14 +1044,11 @@
       return fetch('data/maya_rivers.geojson')
         .then((r) => { if (!r.ok) throw new Error('rivers ' + r.status); return r.json(); })
         .then((geo) => {
-          riverLayer = L.geoJSON(geo, {
-            pane: 'riversPane',
-            style: riverStyle,
-            interactive: false
-          });
+          allRiverFeatures = geo.features || [];
           riversLoaded = true;
           riversLoading = false;
-          if (riversOn) riverLayer.addTo(map);
+          lastRiverMaxOrd = null;
+          if (riversOn) refreshRivers();
         })
         .catch((e) => { riversLoading = false; console.error('River layer failed to load:', e); });
     }
@@ -1030,7 +1057,7 @@
       riversOn = on;
       if (on) {
         if (!riversLoaded) loadRivers();
-        else if (!map.hasLayer(riverLayer)) riverLayer.addTo(map);
+        else { lastRiverMaxOrd = null; refreshRivers(); }
       } else if (riverLayer && map.hasLayer(riverLayer)) {
         map.removeLayer(riverLayer);
       }
@@ -1067,7 +1094,7 @@
       const riversOpt = document.createElement('button');
       riversOpt.type = 'button';
       riversOpt.className = 'bm-option' + (riversOn ? ' active' : '');
-      riversOpt.innerHTML = `<span class="bm-check">${CHECK_SVG}</span><span class="bm-text"><span class="bm-name">Rivers</span><span class="bm-sub">Show river network</span></span>`;
+      riversOpt.innerHTML = `<span class="bm-check">${CHECK_SVG}</span><span class="bm-text"><span class="bm-name">Rivers</span><span class="bm-sub">More detail as you zoom in</span></span>`;
       riversOpt.addEventListener('click', () => setRivers(!riversOn));
       basemapPopover.appendChild(riversOpt);
     }
@@ -2021,12 +2048,13 @@
       renderRankBars(data.rankCounts);
     }
 
-    // ── Refresh labels and analytics when the view changes ───────────────
-    // Labels update immediately; the chart work is debounced so momentum
-    // panning on mobile stays smooth
+    // ── Refresh labels, analytics and rivers when the view changes ───────
+    // Labels and rivers update immediately; the chart work is debounced so
+    // momentum panning on mobile stays smooth
     let analyticsTimer = null;
     function onViewChanged() {
       refreshLabels();
+      refreshRivers();
       if (analyticsTimer) clearTimeout(analyticsTimer);
       analyticsTimer = setTimeout(updateAnalytics, 150);
       scheduleHashUpdate();
@@ -2063,7 +2091,7 @@
         // applyFilters honours any search or rank state restored from a link
         applyFilters();
 
-        // Feature 23: load the river layer (on by default)
+        // Feature 23: load the river layer (on by default, zoom-aware)
         if (riversOn) loadRivers();
 
         // Feature 21: restore a shared radius query once the data is present
