@@ -427,7 +427,7 @@
     .bm-option.active .bm-name { color: #b07d2a; font-weight: 600; }
     .bm-option .bm-sub { font-size: 11px; color: var(--muted); line-height: 1.2; font-style: italic; }
 
-    /* Feature 23: divider and rivers toggle inside the layers popover */
+    /* Feature 23: divider and streams toggle inside the layers popover */
     .bm-divider { height: 1px; background: #eeeeee; margin: 5px 8px; }
 
     .user-loc-icon { background: transparent; border: none; }
@@ -808,7 +808,7 @@
 
       <!-- Section 6 -->
       <section class="ap-section">
-        <p class="ap-note">Data source: Electronic Atlas of Ancient Maya Sites (EAAMS), compiled by Walter Witschey and Clifford Brown. Coordinates in WGS84 (EPSG:4326). Site significance ranked 1 (major centre) to 5 (minimal remains) by the original dataset compilers. River network derived from HydroRIVERS (HydroSHEDS), Lehner and Grill (2013).</p>
+        <p class="ap-note">Data source: Electronic Atlas of Ancient Maya Sites (EAAMS), compiled by Walter Witschey and Clifford Brown. Coordinates in WGS84 (EPSG:4326). Site significance ranked 1 (major centre) to 5 (minimal remains) by the original dataset compilers. Stream network from OpenStreetMap contributors.</p>
       </section>
     </div>
   </aside>
@@ -889,9 +889,10 @@
       const base = params.get('base');
       if (base) state.base = base;
 
-      const rivers = params.get('rivers');
-      if (rivers === '0') state.rivers = false;
-      else if (rivers === '1') state.rivers = true;
+      // Feature 23: streams on/off (default ON, so only "0" is stored)
+      const streams = params.get('streams');
+      if (streams === '0') state.streams = false;
+      else if (streams === '1') state.streams = true;
 
       const rc = params.get('rc');
       const rkm = parseInt(params.get('rkm'), 10);
@@ -940,7 +941,7 @@
     });
     map.addControl(new HomeControl());
 
-    // Feature 23: dedicated pane for the river layer, above basemap tiles
+    // Feature 23: dedicated pane for the stream layer, above basemap tiles
     // but below the site markers and labels
     map.createPane('riversPane');
     map.getPane('riversPane').style.zIndex = 350;
@@ -985,81 +986,62 @@
     const basemapPopover = document.getElementById("basemapPopover");
     const layersBtn = document.getElementById("layersBtn");
 
-    // Feature 23: rivers layer state (on by default), zoom-aware.
-    // The layer now contains only the smaller streams (ord 5-6) that the
-    // basemaps do not draw; the big rivers come from the basemap itself.
-    // ord: 5 = medium stream, 6 = small stream.
-    let riversOn = (initialState.rivers === undefined) ? true : initialState.rivers;
-    let allRiverFeatures = [];
-    let riverLayer = null;
-    let riversLoaded = false;
-    let riversLoading = false;
+    // Feature 23: high-resolution stream layer from OpenStreetMap (on by
+    // default). These are the small watercourses the basemaps under-draw,
+    // at real survey detail so they stay crisp at high zoom. w: 1 = stream,
+    // 2 = canal. The layer is drawn whenever streams would be legible, i.e.
+    // from a moderate zoom inward; at the region overview it is hidden so the
+    // map stays clean.
+    let streamsOn = (initialState.streams === undefined) ? true : initialState.streams;
+    let streamLayer = null;
+    let streamsLoaded = false;
+    let streamsLoading = false;
 
-    // With only small streams in the file, show the medium ones (ord 5) from
-    // a moderate zoom, and the smallest (ord 6) as you get closer to sites.
-    // Below zoom 8 the streams would be visual clutter over the whole region,
-    // so nothing is drawn there and the basemap's own rivers carry the view.
-    function maxRiverOrdForZoom(zoom) {
-      if (zoom <= 7)  return 0;   // region view: rely on basemap rivers only
-      if (zoom === 8) return 5;   // medium streams begin
-      if (zoom === 9) return 5;
-      return 6;                    // zoom 10+: full small-stream detail
+    // Below this zoom the streams are too dense to be useful and just clutter
+    // the overview, so nothing is drawn and the basemap's own rivers show.
+    const STREAM_MIN_ZOOM = 9;
+
+    function streamStyle(feature) {
+      const w = (feature.properties && feature.properties.w) || 1;
+      // canals slightly heavier than natural streams
+      return { color: '#4a90d9', weight: w === 2 ? 1.4 : 1.0, opacity: 0.8 };
     }
 
-    // Finer weights than before, since these are small watercourses meant to
-    // sit alongside the basemap's own river rendering
-    function riverStyle(feature) {
-      const ord = (feature.properties && feature.properties.ord) || 6;
-      const weight = ord === 5 ? 1.3 : 0.8;
-      return { color: '#4a90d9', weight, opacity: 0.8 };
-    }
-
-    let lastRiverMaxOrd = null;
-    function refreshRivers() {
-      if (!riversLoaded || !riversOn) return;
-      const maxOrd = maxRiverOrdForZoom(map.getZoom());
-
-      // At low zoom we show no streams at all; drop the layer if present
-      if (maxOrd === 0) {
-        if (riverLayer && map.hasLayer(riverLayer)) map.removeLayer(riverLayer);
-        lastRiverMaxOrd = 0;
-        return;
+    function updateStreamVisibility() {
+      if (!streamsLoaded || !streamsOn) return;
+      const show = map.getZoom() >= STREAM_MIN_ZOOM;
+      if (show) {
+        if (!map.hasLayer(streamLayer)) streamLayer.addTo(map);
+      } else if (map.hasLayer(streamLayer)) {
+        map.removeLayer(streamLayer);
       }
-      if (maxOrd === lastRiverMaxOrd && riverLayer && map.hasLayer(riverLayer)) return;
-      lastRiverMaxOrd = maxOrd;
-
-      if (riverLayer && map.hasLayer(riverLayer)) map.removeLayer(riverLayer);
-      const subset = allRiverFeatures.filter((f) => (f.properties.ord || 6) <= maxOrd);
-      riverLayer = L.geoJSON(subset, {
-        pane: 'riversPane',
-        style: riverStyle,
-        interactive: false
-      });
-      riverLayer.addTo(map);
     }
 
-    function loadRivers() {
-      if (riversLoaded || riversLoading) return Promise.resolve();
-      riversLoading = true;
-      return fetch('data/maya_rivers.geojson')
-        .then((r) => { if (!r.ok) throw new Error('rivers ' + r.status); return r.json(); })
+    function loadStreams() {
+      if (streamsLoaded || streamsLoading) return Promise.resolve();
+      streamsLoading = true;
+      return fetch('data/maya_streams.geojson')
+        .then((r) => { if (!r.ok) throw new Error('streams ' + r.status); return r.json(); })
         .then((geo) => {
-          allRiverFeatures = geo.features || [];
-          riversLoaded = true;
-          riversLoading = false;
-          lastRiverMaxOrd = null;
-          if (riversOn) refreshRivers();
+          streamLayer = L.geoJSON(geo, {
+            pane: 'riversPane',
+            style: streamStyle,
+            interactive: false
+          });
+          streamsLoaded = true;
+          streamsLoading = false;
+          updateStreamVisibility();
         })
-        .catch((e) => { riversLoading = false; console.error('River layer failed to load:', e); });
+        .catch((e) => { streamsLoading = false; console.error('Stream layer failed to load:', e); });
     }
 
-    function setRivers(on) {
-      riversOn = on;
+    function setStreams(on) {
+      streamsOn = on;
       if (on) {
-        if (!riversLoaded) loadRivers();
-        else { lastRiverMaxOrd = null; refreshRivers(); }
-      } else if (riverLayer && map.hasLayer(riverLayer)) {
-        map.removeLayer(riverLayer);
+        if (!streamsLoaded) loadStreams();
+        else updateStreamVisibility();
+      } else if (streamLayer && map.hasLayer(streamLayer)) {
+        map.removeLayer(streamLayer);
       }
       renderBasemapOptions();
       scheduleHashUpdate();
@@ -1090,12 +1072,12 @@
       divider.className = 'bm-divider';
       basemapPopover.appendChild(divider);
 
-      const riversOpt = document.createElement('button');
-      riversOpt.type = 'button';
-      riversOpt.className = 'bm-option' + (riversOn ? ' active' : '');
-      riversOpt.innerHTML = `<span class="bm-check">${CHECK_SVG}</span><span class="bm-text"><span class="bm-name">Streams</span><span class="bm-sub">Smaller watercourses as you zoom in</span></span>`;
-      riversOpt.addEventListener('click', () => setRivers(!riversOn));
-      basemapPopover.appendChild(riversOpt);
+      const streamsOpt = document.createElement('button');
+      streamsOpt.type = 'button';
+      streamsOpt.className = 'bm-option' + (streamsOn ? ' active' : '');
+      streamsOpt.innerHTML = `<span class="bm-check">${CHECK_SVG}</span><span class="bm-text"><span class="bm-name">Streams</span><span class="bm-sub">Small watercourses, from mid zoom</span></span>`;
+      streamsOpt.addEventListener('click', () => setStreams(!streamsOn));
+      basemapPopover.appendChild(streamsOpt);
     }
     function openBasemapPopover() { basemapPopover.classList.add("open"); layersBtn.classList.add("active"); }
     function closeBasemapPopover() { basemapPopover.classList.remove("open"); layersBtn.classList.remove("active"); }
@@ -1214,9 +1196,8 @@
     }
 
     // Feature 22 (fixed): a label is only shown for a site that is actually
-    // on the map as its own clickable marker right now. This is the single
-    // source of truth shared by both the marker and its label, so a label can
-    // never appear without a circle beneath it.
+    // on the map as its own clickable marker right now, the single source of
+    // truth shared by both marker and label.
     function activeMarkerFor(feature) {
       const m = (currentView === 'bubbles')
         ? bubbleMarkerByIdx.get(feature._idx)
@@ -1260,9 +1241,6 @@
         const [lng, lat] = f.geometry.coordinates;
         if (!bounds.contains([lat, lng])) return;
         const rank = typeof p.rank === 'number' ? p.rank : 4;
-        // A site is a labelling candidate only if BOTH: its rank passes the
-        // zoom cutoff (so we do not flood the map), AND it is currently drawn
-        // as its own clickable marker (so the label always has a circle).
         if (rank > rankCutoff) return;
         if (!activeMarkerFor(f)) return;
         candidates.push({ f, rank, lat, lng, name: p.name });
@@ -1675,7 +1653,7 @@
       if (activeRanks.size > 0) params.set('ranks', [...activeRanks].sort((a, b) => a - b).join(','));
       if (currentView !== 'points') params.set('view', currentView);
       if (activeBasemapName !== 'OpenStreetMap') params.set('base', activeBasemapName);
-      if (!riversOn) params.set('rivers', '0');
+      if (!streamsOn) params.set('streams', '0');
       if (radiusFilter) {
         params.set('rc', radiusFilter.lat.toFixed(4) + ',' + radiusFilter.lng.toFixed(4));
         params.set('rkm', String(radiusFilter.km));
@@ -2034,11 +2012,11 @@
       renderRankBars(data.rankCounts);
     }
 
-    // ── Refresh labels, analytics and rivers when the view changes ───────
+    // ── Refresh labels, analytics and streams when the view changes ───────
     let analyticsTimer = null;
     function onViewChanged() {
       refreshLabels();
-      refreshRivers();
+      updateStreamVisibility();
       if (analyticsTimer) clearTimeout(analyticsTimer);
       analyticsTimer = setTimeout(updateAnalytics, 150);
       scheduleHashUpdate();
@@ -2046,9 +2024,6 @@
     map.on('zoomend', onViewChanged);
     map.on('moveend', onViewChanged);
 
-    // Feature 22: clustering settles asynchronously, so labels are recomputed
-    // once the cluster layout has finished changing (this is what makes the
-    // label/marker pairing correct as clusters expand and collapse)
     pointsCluster.on('animationend', refreshLabels);
     bubblesCluster.on('animationend', refreshLabels);
 
@@ -2073,7 +2048,8 @@
 
         applyFilters();
 
-        if (riversOn) loadRivers();
+        // Feature 23: load the OSM stream layer (on by default)
+        if (streamsOn) loadStreams();
 
         if (initialState.radius) {
           rcSlider.value = String(initialState.radius.km);
