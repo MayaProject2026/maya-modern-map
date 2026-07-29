@@ -46,6 +46,7 @@
     #map { position: absolute; inset: 0; height: 100%; width: 100%; background: var(--map-bg); }
     .leaflet-container { background: var(--map-bg); font-family: inherit; }
     .leaflet-container.radius-active { cursor: crosshair; }
+    .leaflet-container.measure-active { cursor: crosshair; }
 
     .map-loading {
       position: absolute; top: 50%; left: 50%;
@@ -375,6 +376,10 @@
     .map-icon-btn.loading svg { animation: locspin 0.9s linear infinite; }
     @keyframes locspin { to { transform: rotate(360deg); } }
 
+    /* Feature 24: measure button uses a violet active state to match its tool */
+    .map-icon-btn.measure-on { background: #7c3aed; color: #ffffff; }
+    .map-icon-btn.measure-on:hover { background: #6d28d9; }
+
     /* Feature 21: share confirmation toast */
     .share-toast {
       position: fixed;
@@ -394,6 +399,48 @@
       white-space: nowrap;
     }
     .share-toast.show { opacity: 1; visibility: visible; transform: translateY(0); }
+
+    /* Feature 24: measure readout panel and vertex labels */
+    .measure-panel {
+      position: fixed;
+      top: 16px; left: 50%;
+      transform: translateX(-50%);
+      z-index: 1150;
+      width: 280px; max-width: calc(100vw - 32px);
+      background: var(--panel-bg); color: var(--text);
+      border-radius: 14px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18);
+      padding: 12px 14px;
+      display: none;
+    }
+    .measure-panel.open { display: block; }
+    .measure-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    .measure-title { font-size: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: #7c3aed; }
+    .measure-done {
+      background: #7c3aed; color: #fff; border: none; border-radius: 999px;
+      padding: 4px 14px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
+    }
+    .measure-done:hover { background: #6d28d9; }
+    .measure-readout { font-size: 20px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1.2; }
+    .measure-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .measure-actions { display: flex; gap: 6px; margin-top: 10px; }
+    .measure-btn-sm {
+      flex: 1; background: var(--chip-bg); border: none; border-radius: 8px;
+      padding: 6px 0; font-size: 12px; font-weight: 600; color: var(--text);
+      cursor: pointer; font-family: inherit; transition: background 0.14s ease;
+    }
+    .measure-btn-sm:hover { background: var(--chip-bg-hover); }
+    .measure-hint { font-size: 11px; color: var(--muted-2); font-style: italic; margin-top: 8px; line-height: 1.4; }
+
+    .measure-label { background: transparent !important; border: none !important; }
+    .measure-label-inner {
+      display: inline-block; white-space: nowrap;
+      font-size: 11px; font-weight: 600; color: #5b21b6;
+      background: rgba(255, 255, 255, 0.85);
+      padding: 0 4px; border-radius: 4px;
+      transform: translateX(8px);
+      pointer-events: none;
+    }
 
     .layers-wrap { position: relative; display: flex; }
 
@@ -689,6 +736,7 @@
       .share-toast { bottom: 74px; }
       .details-tab { padding: 12px 6px; font-size: 11px; letter-spacing: 1px; }
       .analytics-panel { width: 100%; max-width: 100%; }
+      .measure-panel { top: 10px; width: calc(100vw - 20px); }
     }
   </style>
 </head>
@@ -808,7 +856,7 @@
 
       <!-- Section 6 -->
       <section class="ap-section">
-        <p class="ap-note">Data source: Electronic Atlas of Ancient Maya Sites (EAAMS), compiled by Walter Witschey and Clifford Brown. Coordinates in WGS84 (EPSG:4326). Site significance ranked 1 (major centre) to 5 (minimal remains) by the original dataset compilers. Stream network from OpenStreetMap contributors.</p>
+        <p class="ap-note">Data source: Electronic Atlas of Ancient Maya Sites (EAAMS), compiled by Walter Witschey and Clifford Brown. Coordinates in WGS84 (EPSG:4326). Site significance ranked 1 (major centre) to 5 (minimal remains) by the original dataset compilers. Stream network from OpenStreetMap contributors and supplied survey data.</p>
       </section>
     </div>
   </aside>
@@ -825,7 +873,30 @@
 
   <div class="share-toast" id="shareToast" role="status" aria-live="polite"></div>
 
+  <div class="measure-panel" id="measurePanel" aria-hidden="true">
+    <div class="measure-head">
+      <span class="measure-title">Measure</span>
+      <button class="measure-done" id="measureDone" type="button">Done</button>
+    </div>
+    <div class="measure-readout" id="measureReadout">Click points on the map</div>
+    <div class="measure-sub" id="measureSub"></div>
+    <div class="measure-actions">
+      <button class="measure-btn-sm" id="measureUndo" type="button">Undo</button>
+      <button class="measure-btn-sm" id="measureClear" type="button">Clear</button>
+    </div>
+    <div class="measure-hint">Click points for distance. Click the first point again to close a shape and measure its area.</div>
+  </div>
+
   <div class="map-controls-br">
+    <button class="map-icon-btn" id="measureBtn" type="button" title="Measure distance or area" aria-label="Measure distance or area">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"></path>
+        <path d="m14.5 12.5 2-2"></path>
+        <path d="m11.5 9.5 2-2"></path>
+        <path d="m8.5 6.5 2-2"></path>
+        <path d="m17.5 15.5 2-2"></path>
+      </svg>
+    </button>
     <button class="map-icon-btn" id="shareBtn" type="button" title="Copy a link to this view" aria-label="Copy a link to this view">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M10.5 13.5a4.5 4.5 0 0 0 6.36 0l3-3a4.5 4.5 0 0 0-6.36-6.36l-1.5 1.5"></path>
@@ -889,7 +960,6 @@
       const base = params.get('base');
       if (base) state.base = base;
 
-      // Feature 23: streams on/off (default ON, so only "0" is stored)
       const streams = params.get('streams');
       if (streams === '0') state.streams = false;
       else if (streams === '1') state.streams = true;
@@ -941,14 +1011,16 @@
     });
     map.addControl(new HomeControl());
 
-    // Feature 23: dedicated pane for the stream layer, above basemap tiles
-    // but below the site markers and labels
     map.createPane('riversPane');
     map.getPane('riversPane').style.zIndex = 350;
 
     map.createPane('labelsPane');
     map.getPane('labelsPane').style.zIndex = 640;
     map.getPane('labelsPane').classList.add('leaflet-labels-pane');
+
+    // Feature 24: measure drawings sit above everything else
+    map.createPane('measurePane');
+    map.getPane('measurePane').style.zIndex = 660;
 
     // ── Basemaps ──────────────────────────────────────────────────────────
     const basemaps = {
@@ -986,24 +1058,15 @@
     const basemapPopover = document.getElementById("basemapPopover");
     const layersBtn = document.getElementById("layersBtn");
 
-    // Feature 23: high-resolution stream layer from OpenStreetMap (on by
-    // default). These are the small watercourses the basemaps under-draw,
-    // at real survey detail so they stay crisp at high zoom. w: 1 = stream,
-    // 2 = canal. The layer is drawn whenever streams would be legible, i.e.
-    // from a moderate zoom inward; at the region overview it is hidden so the
-    // map stays clean.
     let streamsOn = (initialState.streams === undefined) ? true : initialState.streams;
     let streamLayer = null;
     let streamsLoaded = false;
     let streamsLoading = false;
 
-    // Below this zoom the streams are too dense to be useful and just clutter
-    // the overview, so nothing is drawn and the basemap's own rivers show.
     const STREAM_MIN_ZOOM = 9;
 
     function streamStyle(feature) {
       const w = (feature.properties && feature.properties.w) || 1;
-      // canals slightly heavier than natural streams
       return { color: '#4a90d9', weight: w === 2 ? 1.4 : 1.0, opacity: 0.8 };
     }
 
@@ -1146,6 +1209,7 @@
     let radiusToolActive = false;
     let radiusFilter = null;
     let radiusCircle = null;
+    let measureActive = false;
 
     const pointMarkerByIdx = new Map();
     const bubbleMarkerByIdx = new Map();
@@ -1195,9 +1259,6 @@
       return 10.5;
     }
 
-    // Feature 22 (fixed): a label is only shown for a site that is actually
-    // on the map as its own clickable marker right now, the single source of
-    // truth shared by both marker and label.
     function activeMarkerFor(feature) {
       const m = (currentView === 'bubbles')
         ? bubbleMarkerByIdx.get(feature._idx)
@@ -1559,6 +1620,8 @@
     }
 
     function setRadiusToolActive(on) {
+      // Feature 24: radius and measure tools are mutually exclusive
+      if (on && measureActive) setMeasureActive(false);
       radiusToolActive = on;
       radiusBtn.classList.toggle('active', on);
       radiusControl.classList.toggle('open', on);
@@ -1592,6 +1655,7 @@
 
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
+        if (measureActive) setMeasureActive(false);
         if (radiusToolActive) setRadiusToolActive(false);
         if (analyticsPanel.classList.contains('open')) closeAnalytics();
         if (isMobile() && panel.classList.contains('open')) closePanelMobile();
@@ -2012,6 +2076,220 @@
       renderRankBars(data.rankCounts);
     }
 
+    // ── Feature 24: measure distance and area ─────────────────────────────
+    const measureBtn = document.getElementById('measureBtn');
+    const measurePanel = document.getElementById('measurePanel');
+    const measureReadout = document.getElementById('measureReadout');
+    const measureSub = document.getElementById('measureSub');
+    const measureUndoBtn = document.getElementById('measureUndo');
+    const measureClearBtn = document.getElementById('measureClear');
+    const measureDoneBtn = document.getElementById('measureDone');
+
+    const MEASURE_COLOR = '#7c3aed';
+    let measurePoints = [];
+    let measureClosed = false;
+    let measureLine = null;
+    let measurePolygon = null;
+    let measureVertexMarkers = [];
+    let measureLabelMarkers = [];
+
+    function fmtKm(km) { return km < 10 ? km.toFixed(2) : km.toFixed(1); }
+    function fmtArea(a) {
+      if (a < 10) return a.toFixed(2);
+      if (a < 1000) return a.toFixed(1);
+      return Math.round(a).toLocaleString('en-US');
+    }
+
+    function measureTotalKm(pts, closeLoop) {
+      let d = 0;
+      for (let i = 0; i < pts.length - 1; i++) {
+        d += haversineKm(pts[i].lat, pts[i].lng, pts[i + 1].lat, pts[i + 1].lng);
+      }
+      if (closeLoop && pts.length > 2) {
+        d += haversineKm(pts[pts.length - 1].lat, pts[pts.length - 1].lng, pts[0].lat, pts[0].lng);
+      }
+      return d;
+    }
+
+    // Area of a polygon on the sphere (Chamberlain and Duquette formula)
+    function measureAreaKm2(pts) {
+      if (pts.length < 3) return 0;
+      const R = 6371;
+      const toRad = (x) => x * Math.PI / 180;
+      let sum = 0;
+      for (let i = 0; i < pts.length; i++) {
+        const p1 = pts[i], p2 = pts[(i + 1) % pts.length];
+        sum += (toRad(p2.lng) - toRad(p1.lng)) * (2 + Math.sin(toRad(p1.lat)) + Math.sin(toRad(p2.lat)));
+      }
+      return Math.abs(sum * R * R / 2);
+    }
+
+    function nearestSiteName(latlng) {
+      if (!allSites.length) return null;
+      let best = null, bestD = Infinity;
+      for (const f of allSites) {
+        const c = f.geometry.coordinates;
+        const d = haversineKm(latlng.lat, latlng.lng, c[1], c[0]);
+        if (d < bestD) { bestD = d; best = f; }
+      }
+      return (best && best.properties && best.properties.name) ? best.properties.name : null;
+    }
+
+    function clearMeasureDrawing() {
+      if (measureLine) { map.removeLayer(measureLine); measureLine = null; }
+      if (measurePolygon) { map.removeLayer(measurePolygon); measurePolygon = null; }
+      measureVertexMarkers.forEach((m) => { if (m) map.removeLayer(m); });
+      measureLabelMarkers.forEach((m) => { if (m) map.removeLayer(m); });
+      measureVertexMarkers = [];
+      measureLabelMarkers = [];
+      measurePoints = [];
+      measureClosed = false;
+    }
+
+    function addMeasureVertex(latlng) {
+      const dot = L.circleMarker(latlng, {
+        radius: 5, color: '#ffffff', weight: 2,
+        fillColor: MEASURE_COLOR, fillOpacity: 1, pane: 'measurePane'
+      }).addTo(map);
+      measureVertexMarkers.push(dot);
+
+      const name = nearestSiteName(latlng);
+      if (name) {
+        const label = L.marker(latlng, {
+          icon: L.divIcon({
+            className: 'measure-label',
+            html: `<span class="measure-label-inner">near ${name}</span>`,
+            iconSize: [0, 0], iconAnchor: [0, 8]
+          }),
+          pane: 'measurePane', interactive: false, keyboard: false
+        }).addTo(map);
+        measureLabelMarkers.push(label);
+      } else {
+        measureLabelMarkers.push(null);
+      }
+    }
+
+    function redrawMeasureLine() {
+      if (measureClosed) return;
+      if (measureLine) {
+        measureLine.setLatLngs(measurePoints);
+      } else if (measurePoints.length >= 2) {
+        measureLine = L.polyline(measurePoints, {
+          color: MEASURE_COLOR, weight: 3, opacity: 0.9, dashArray: '6,6', pane: 'measurePane'
+        }).addTo(map);
+      }
+    }
+
+    function closeMeasureShape() {
+      measureClosed = true;
+      if (measureLine) { map.removeLayer(measureLine); measureLine = null; }
+      measurePolygon = L.polygon(measurePoints, {
+        color: MEASURE_COLOR, weight: 3, opacity: 0.9,
+        fillColor: MEASURE_COLOR, fillOpacity: 0.12, pane: 'measurePane'
+      }).addTo(map);
+      updateMeasurePanel();
+    }
+
+    function addMeasurePoint(latlng) {
+      if (measureClosed) return;
+      if (measurePoints.length >= 3) {
+        const firstPt = map.latLngToContainerPoint(measurePoints[0]);
+        const clickPt = map.latLngToContainerPoint(latlng);
+        if (firstPt.distanceTo(clickPt) < 16) { closeMeasureShape(); return; }
+      }
+      measurePoints.push(latlng);
+      addMeasureVertex(latlng);
+      redrawMeasureLine();
+      updateMeasurePanel();
+    }
+
+    function updateMeasurePanel() {
+      if (measureClosed) {
+        const area = measureAreaKm2(measurePoints);
+        const perim = measureTotalKm(measurePoints, true);
+        measureReadout.textContent = `${fmtArea(area)} km²`;
+        measureSub.textContent = `Perimeter ${fmtKm(perim)} km · ${measurePoints.length} points`;
+        return;
+      }
+      const n = measurePoints.length;
+      if (n === 0) {
+        measureReadout.textContent = 'Click points on the map';
+        measureSub.textContent = '';
+      } else if (n === 1) {
+        const nm = nearestSiteName(measurePoints[0]);
+        measureReadout.textContent = '0.00 km';
+        measureSub.textContent = nm ? `Start near ${nm}` : 'Click the next point';
+      } else {
+        const dist = measureTotalKm(measurePoints, false);
+        measureReadout.textContent = `${fmtKm(dist)} km`;
+        const a = nearestSiteName(measurePoints[0]);
+        const b = nearestSiteName(measurePoints[n - 1]);
+        measureSub.textContent = (a && b) ? `From near ${a} to near ${b}` : `${n} points`;
+      }
+    }
+
+    function setMeasureActive(on) {
+      measureActive = on;
+      measureBtn.classList.toggle('active', on);
+      measureBtn.classList.toggle('measure-on', on);
+      measurePanel.classList.toggle('open', on);
+      measurePanel.setAttribute('aria-hidden', on ? 'false' : 'true');
+      map.getContainer().classList.toggle('measure-active', on);
+
+      if (on) {
+        if (radiusToolActive) setRadiusToolActive(false);
+        closeBasemapPopover();
+        if (map.doubleClickZoom) map.doubleClickZoom.disable();
+        clearMeasureDrawing();
+        updateMeasurePanel();
+        if (isMobile()) closePanelMobile();
+      } else {
+        if (map.doubleClickZoom) map.doubleClickZoom.enable();
+        clearMeasureDrawing();
+      }
+    }
+
+    measureBtn.addEventListener('click', (e) => { e.stopPropagation(); setMeasureActive(!measureActive); });
+    measureDoneBtn.addEventListener('click', () => setMeasureActive(false));
+    measureClearBtn.addEventListener('click', () => { clearMeasureDrawing(); updateMeasurePanel(); });
+    measureUndoBtn.addEventListener('click', () => {
+      if (measureClosed) {
+        measureClosed = false;
+        if (measurePolygon) { map.removeLayer(measurePolygon); measurePolygon = null; }
+        redrawMeasureLine();
+        updateMeasurePanel();
+        return;
+      }
+      if (measurePoints.length === 0) return;
+      measurePoints.pop();
+      const dot = measureVertexMarkers.pop(); if (dot) map.removeLayer(dot);
+      const label = measureLabelMarkers.pop(); if (label) map.removeLayer(label);
+      if (measurePoints.length < 2 && measureLine) { map.removeLayer(measureLine); measureLine = null; }
+      else redrawMeasureLine();
+      updateMeasurePanel();
+    });
+
+    // Capture map clicks for measuring before markers or popups see them
+    const measureContainer = map.getContainer();
+    let measDownPt = null, measMoved = false;
+    measureContainer.addEventListener('pointerdown', (e) => {
+      if (!measureActive) return;
+      measDownPt = [e.clientX, e.clientY];
+      measMoved = false;
+    }, true);
+    measureContainer.addEventListener('pointermove', (e) => {
+      if (!measureActive || !measDownPt) return;
+      if (Math.hypot(e.clientX - measDownPt[0], e.clientY - measDownPt[1]) > 6) measMoved = true;
+    }, true);
+    measureContainer.addEventListener('click', (e) => {
+      if (!measureActive) return;
+      e.stopPropagation();
+      if (measMoved) { measDownPt = null; return; }
+      const rect = measureContainer.getBoundingClientRect();
+      const pt = L.point(e.clientX - rect.left, e.clientY - rect.top);
+      addMeasurePoint(map.containerPointToLatLng(pt));
+    }, true);
+
     // ── Refresh labels, analytics and streams when the view changes ───────
     let analyticsTimer = null;
     function onViewChanged() {
@@ -2048,7 +2326,6 @@
 
         applyFilters();
 
-        // Feature 23: load the OSM stream layer (on by default)
         if (streamsOn) loadStreams();
 
         if (initialState.radius) {
