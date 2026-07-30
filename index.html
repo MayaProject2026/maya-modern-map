@@ -1031,8 +1031,13 @@
     map.getPane('labelsPane').style.zIndex = 640;
     map.getPane('labelsPane').classList.add('leaflet-labels-pane');
 
+    // Feature 24: the measure line sits in one pane and its distance labels
+    // in a HIGHER pane, so the labels always render on top of the line and
+    // stay readable (fixes the line covering the km pills).
+    map.createPane('measureLinePane');
+    map.getPane('measureLinePane').style.zIndex = 658;
     map.createPane('measurePane');
-    map.getPane('measurePane').style.zIndex = 660;
+    map.getPane('measurePane').style.zIndex = 665;
 
     // ── Basemaps ──────────────────────────────────────────────────────────
     const basemaps = {
@@ -2103,7 +2108,7 @@
     let measurePolygon = null;
     let measureVertexMarkers = [];
     let measureLabelMarkers = [];
-    let measureSegMarkers = [];   // per-leg km labels
+    let measureSegMarkers = [];
 
     function fmtKm(km) { return km < 10 ? km.toFixed(2) : km.toFixed(1); }
     function fmtArea(a) {
@@ -2146,7 +2151,7 @@
       return (best && best.properties && best.properties.name) ? best.properties.name : null;
     }
 
-    // Build a small km label sitting at the midpoint of one leg
+    // Segment km labels live in the higher 'measurePane', above the line
     function makeSegLabel(a, b) {
       const mid = L.latLng((a.lat + b.lat) / 2, (a.lng + b.lng) / 2);
       const km = haversineKm(a.lat, a.lng, b.lat, b.lng);
@@ -2160,13 +2165,12 @@
       });
     }
 
-    // Redraw all per-leg km labels for the current points
     function redrawSegLabels() {
       measureSegMarkers.forEach((m) => { if (m) map.removeLayer(m); });
       measureSegMarkers = [];
       const n = measurePoints.length;
       if (n < 2) return;
-      const lastLeg = measureClosed ? n : n - 1; // include closing leg when a shape
+      const lastLeg = measureClosed ? n : n - 1;
       for (let i = 0; i < lastLeg; i++) {
         const a = measurePoints[i];
         const b = measurePoints[(i + 1) % n];
@@ -2188,6 +2192,7 @@
       measureClosed = false;
     }
 
+    // Vertex dots sit in the higher label pane too, so they stay above the line
     function addMeasureVertex(latlng) {
       const dot = L.circleMarker(latlng, {
         radius: 5, color: '#ffffff', weight: 2,
@@ -2211,13 +2216,14 @@
       }
     }
 
+    // The connecting line is drawn in the LOWER 'measureLinePane'
     function redrawMeasureLine() {
       if (measureClosed) return;
       if (measureLine) {
         measureLine.setLatLngs(measurePoints);
       } else if (measurePoints.length >= 2) {
         measureLine = L.polyline(measurePoints, {
-          color: MEASURE_COLOR, weight: 3, opacity: 0.9, dashArray: '6,6', pane: 'measurePane'
+          color: MEASURE_COLOR, weight: 3, opacity: 0.9, dashArray: '6,6', pane: 'measureLinePane'
         }).addTo(map);
       }
     }
@@ -2227,7 +2233,7 @@
       if (measureLine) { map.removeLayer(measureLine); measureLine = null; }
       measurePolygon = L.polygon(measurePoints, {
         color: MEASURE_COLOR, weight: 3, opacity: 0.9,
-        fillColor: MEASURE_COLOR, fillOpacity: 0.12, pane: 'measurePane'
+        fillColor: MEASURE_COLOR, fillOpacity: 0.12, pane: 'measureLinePane'
       }).addTo(map);
       redrawSegLabels();
       updateMeasurePanel();
@@ -2334,9 +2340,6 @@
       const pt = L.point(e.clientX - rect.left, e.clientY - rect.top);
       addMeasurePoint(map.containerPointToLatLng(pt));
     }, true);
-
-    // Keep segment and vertex labels correctly placed as the map moves/zooms
-    // (markers reposition automatically, but closing-leg label needs no extra work)
 
     // ── Refresh labels, analytics and streams when the view changes ───────
     let analyticsTimer = null;
