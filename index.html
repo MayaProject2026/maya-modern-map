@@ -30,6 +30,7 @@
       --muted-2: #9ca3af;
       --popup-bg: #16213e;
       --map-bg: #0e1424;
+      --measure: #dc7d3c;
     }
 
     * { box-sizing: border-box; }
@@ -376,9 +377,9 @@
     .map-icon-btn.loading svg { animation: locspin 0.9s linear infinite; }
     @keyframes locspin { to { transform: rotate(360deg); } }
 
-    /* Feature 24: measure button uses a violet active state to match its tool */
-    .map-icon-btn.measure-on { background: #7c3aed; color: #ffffff; }
-    .map-icon-btn.measure-on:hover { background: #6d28d9; }
+    /* Feature 24: measure button uses the app's gold accent when active */
+    .map-icon-btn.measure-on { background: var(--gold); color: #1a1a1a; }
+    .map-icon-btn.measure-on:hover { background: var(--gold-soft); }
 
     /* Feature 21: share confirmation toast */
     .share-toast {
@@ -400,7 +401,7 @@
     }
     .share-toast.show { opacity: 1; visibility: visible; transform: translateY(0); }
 
-    /* Feature 24: measure readout panel and vertex labels */
+    /* Feature 24: measure readout panel and labels */
     .measure-panel {
       position: fixed;
       top: 16px; left: 50%;
@@ -415,12 +416,12 @@
     }
     .measure-panel.open { display: block; }
     .measure-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-    .measure-title { font-size: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: #7c3aed; }
+    .measure-title { font-size: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: #b06a2a; }
     .measure-done {
-      background: #7c3aed; color: #fff; border: none; border-radius: 999px;
+      background: var(--gold); color: #1a1a1a; border: none; border-radius: 999px;
       padding: 4px 14px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
     }
-    .measure-done:hover { background: #6d28d9; }
+    .measure-done:hover { background: var(--gold-soft); }
     .measure-readout { font-size: 20px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1.2; }
     .measure-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
     .measure-actions { display: flex; gap: 6px; margin-top: 10px; }
@@ -435,10 +436,22 @@
     .measure-label { background: transparent !important; border: none !important; }
     .measure-label-inner {
       display: inline-block; white-space: nowrap;
-      font-size: 11px; font-weight: 600; color: #5b21b6;
+      font-size: 11px; font-weight: 600; color: #8a4b12;
       background: rgba(255, 255, 255, 0.85);
       padding: 0 4px; border-radius: 4px;
       transform: translateX(8px);
+      pointer-events: none;
+    }
+
+    /* Feature 24: per-segment km label sitting on the midpoint of each leg */
+    .measure-seg { background: transparent !important; border: none !important; }
+    .measure-seg-inner {
+      display: inline-block; white-space: nowrap;
+      font-size: 11px; font-weight: 700; color: #ffffff;
+      background: var(--measure);
+      padding: 1px 6px; border-radius: 999px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+      font-variant-numeric: tabular-nums;
       pointer-events: none;
     }
 
@@ -1018,7 +1031,6 @@
     map.getPane('labelsPane').style.zIndex = 640;
     map.getPane('labelsPane').classList.add('leaflet-labels-pane');
 
-    // Feature 24: measure drawings sit above everything else
     map.createPane('measurePane');
     map.getPane('measurePane').style.zIndex = 660;
 
@@ -1620,7 +1632,6 @@
     }
 
     function setRadiusToolActive(on) {
-      // Feature 24: radius and measure tools are mutually exclusive
       if (on && measureActive) setMeasureActive(false);
       radiusToolActive = on;
       radiusBtn.classList.toggle('active', on);
@@ -2085,13 +2096,14 @@
     const measureClearBtn = document.getElementById('measureClear');
     const measureDoneBtn = document.getElementById('measureDone');
 
-    const MEASURE_COLOR = '#7c3aed';
+    const MEASURE_COLOR = '#dc7d3c';
     let measurePoints = [];
     let measureClosed = false;
     let measureLine = null;
     let measurePolygon = null;
     let measureVertexMarkers = [];
     let measureLabelMarkers = [];
+    let measureSegMarkers = [];   // per-leg km labels
 
     function fmtKm(km) { return km < 10 ? km.toFixed(2) : km.toFixed(1); }
     function fmtArea(a) {
@@ -2111,7 +2123,6 @@
       return d;
     }
 
-    // Area of a polygon on the sphere (Chamberlain and Duquette formula)
     function measureAreaKm2(pts) {
       if (pts.length < 3) return 0;
       const R = 6371;
@@ -2135,13 +2146,44 @@
       return (best && best.properties && best.properties.name) ? best.properties.name : null;
     }
 
+    // Build a small km label sitting at the midpoint of one leg
+    function makeSegLabel(a, b) {
+      const mid = L.latLng((a.lat + b.lat) / 2, (a.lng + b.lng) / 2);
+      const km = haversineKm(a.lat, a.lng, b.lat, b.lng);
+      return L.marker(mid, {
+        icon: L.divIcon({
+          className: 'measure-seg',
+          html: `<span class="measure-seg-inner">${fmtKm(km)} km</span>`,
+          iconSize: [0, 0], iconAnchor: [0, 0]
+        }),
+        pane: 'measurePane', interactive: false, keyboard: false
+      });
+    }
+
+    // Redraw all per-leg km labels for the current points
+    function redrawSegLabels() {
+      measureSegMarkers.forEach((m) => { if (m) map.removeLayer(m); });
+      measureSegMarkers = [];
+      const n = measurePoints.length;
+      if (n < 2) return;
+      const lastLeg = measureClosed ? n : n - 1; // include closing leg when a shape
+      for (let i = 0; i < lastLeg; i++) {
+        const a = measurePoints[i];
+        const b = measurePoints[(i + 1) % n];
+        const seg = makeSegLabel(a, b).addTo(map);
+        measureSegMarkers.push(seg);
+      }
+    }
+
     function clearMeasureDrawing() {
       if (measureLine) { map.removeLayer(measureLine); measureLine = null; }
       if (measurePolygon) { map.removeLayer(measurePolygon); measurePolygon = null; }
       measureVertexMarkers.forEach((m) => { if (m) map.removeLayer(m); });
       measureLabelMarkers.forEach((m) => { if (m) map.removeLayer(m); });
+      measureSegMarkers.forEach((m) => { if (m) map.removeLayer(m); });
       measureVertexMarkers = [];
       measureLabelMarkers = [];
+      measureSegMarkers = [];
       measurePoints = [];
       measureClosed = false;
     }
@@ -2187,6 +2229,7 @@
         color: MEASURE_COLOR, weight: 3, opacity: 0.9,
         fillColor: MEASURE_COLOR, fillOpacity: 0.12, pane: 'measurePane'
       }).addTo(map);
+      redrawSegLabels();
       updateMeasurePanel();
     }
 
@@ -2200,6 +2243,7 @@
       measurePoints.push(latlng);
       addMeasureVertex(latlng);
       redrawMeasureLine();
+      redrawSegLabels();
       updateMeasurePanel();
     }
 
@@ -2221,7 +2265,7 @@
         measureSub.textContent = nm ? `Start near ${nm}` : 'Click the next point';
       } else {
         const dist = measureTotalKm(measurePoints, false);
-        measureReadout.textContent = `${fmtKm(dist)} km`;
+        measureReadout.textContent = `${fmtKm(dist)} km total`;
         const a = nearestSiteName(measurePoints[0]);
         const b = nearestSiteName(measurePoints[n - 1]);
         measureSub.textContent = (a && b) ? `From near ${a} to near ${b}` : `${n} points`;
@@ -2257,6 +2301,7 @@
         measureClosed = false;
         if (measurePolygon) { map.removeLayer(measurePolygon); measurePolygon = null; }
         redrawMeasureLine();
+        redrawSegLabels();
         updateMeasurePanel();
         return;
       }
@@ -2266,10 +2311,10 @@
       const label = measureLabelMarkers.pop(); if (label) map.removeLayer(label);
       if (measurePoints.length < 2 && measureLine) { map.removeLayer(measureLine); measureLine = null; }
       else redrawMeasureLine();
+      redrawSegLabels();
       updateMeasurePanel();
     });
 
-    // Capture map clicks for measuring before markers or popups see them
     const measureContainer = map.getContainer();
     let measDownPt = null, measMoved = false;
     measureContainer.addEventListener('pointerdown', (e) => {
@@ -2289,6 +2334,9 @@
       const pt = L.point(e.clientX - rect.left, e.clientY - rect.top);
       addMeasurePoint(map.containerPointToLatLng(pt));
     }, true);
+
+    // Keep segment and vertex labels correctly placed as the map moves/zooms
+    // (markers reposition automatically, but closing-leg label needs no extra work)
 
     // ── Refresh labels, analytics and streams when the view changes ───────
     let analyticsTimer = null;
