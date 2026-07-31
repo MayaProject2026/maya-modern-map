@@ -2,65 +2,78 @@
 
 A log of significant changes and progress on the Maya Modern Map project.
 
-## 2026-07-14
+## 2026-07-31
 
-### Feature 19: Performance pass
+### Feature 26: Filter and flag sites with detailed structure data
 
-- Bubble markers are now built lazily on first use of the Bubbles view instead of at page load, halving upfront marker construction
-- Chart.js and the datalabels plugin now load only when the Details panel is first opened
-- Added preconnect hints for the tile server and CDN origins and a meta description for search engines
-- Added accessibility labels to the search input and both radius sliders
-- Measured with Lighthouse (median of three runs): mobile performance improved from 42 to 55, desktop from 72 to 76, SEO from 91 to 100
+- Added a "Show only sites with maps" checkbox beneath the search bar that narrows the list and map to the sites for which detailed structure data exists
+- Flagged sites (Bed Rock, Blue Creek, Chum Balam-Nal, Grey Fox, Nojol Nah) show a small map icon beside their name in the site list, and a "Detailed site map available" badge in their popup
+- The set of flagged sites was derived by matching each structure cluster to the nearest site in the main dataset by great-circle distance, since the survey folder names differ from the dataset's site names
+- The filter combines with the search, rank, and radius filters and is carried in the shareable URL as data=1
 
-## 2026-07-13
+### Feature 25: Structure footprint layer for the Blue Creek area
 
-### Fix: significance bars
+- Added a structures layer showing excavated building footprints for a cluster of sites in the Blue Creek area of northern Belize, drawn from supplied archaeological survey data
+- Built data/maya_structures.geojson by reprojecting the supplied shapefiles from their local UTM grids (Clarke 1866, EPSG:26716 and EPSG:26916 variants) to WGS84, stripping Z coordinates, and merging the cleanest polygon and line sources into a single 1,852 feature file
+- Redundant CAD exports and a corrupt source file were deliberately excluded to avoid drawing the same structures twice
+- Footprints are drawn as warm stone polygons with a darker outline, in the style of an archaeological site plan, in a dedicated map pane
+- The layer appears only from zoom 14 and above so it never clutters the regional view, can be toggled in the layers menu, and is carried in the shareable URL as struct=0 when off
 
-- The Sites by Significance bars rendered empty because the fill element was styled inline; the fill now renders as a block element
-- Bars use a square root scale so small categories such as Major Centre remain visible alongside Minor
+### Feature 24: Measure tool for distance and area
 
-## 2026-07-12
+- Added a measure tool to the bottom-right control stack that reports great-circle distances along a clicked path using the Haversine formula
+- Clicking the first point again closes the shape and reports the enclosed area using the spherical excess formula, plus the perimeter
+- Each leg carries a distance label at its midpoint, and each vertex names the nearest site
+- The connecting line and its labels are drawn in separate map panes so the distance labels always sit above the line and stay readable
+- The tool is mutually exclusive with the radius tool and exits on the Escape key or the Done button
 
-### Feature 18: Mobile search drawer and bottom radius bar
+## 2026-07-28
 
-- On phones the map is now full screen with a gold Search tab on the left edge, mirroring the Details tab on the right
-- Tapping Search slides in a drawer with the search box, rank filters, and the full site list; picking a result closes the drawer and flies to the site
-- Activating the radius tool on mobile closes the drawer and shows a slim bottom bar with the distance slider and live count; Done dismisses it
-- Desktop layout is unchanged
+### Feature 23: Small watercourse layer
+
+- Added a streams layer that renders small watercourses across the region, drawn from OpenStreetMap waterway data merged with supplied survey data for the Belize and Guatemala core
+- Source data was clipped to the Maya region, reprojected to WGS84, and simplified to keep the file lightweight
+- Streams appear from zoom 9 and above so the regional overview stays uncluttered, and can be toggled in the layers menu
+- A supervisor-requested comparison of candidate basemaps informed keeping the existing four basemaps rather than adopting a terrain-only alternative
+
+## 2026-07-27
+
+### Feature 22: Low-zoom site labels
+
+- Major site names now remain visible when zoomed out to the regional overview, addressing supervisor feedback that the map was hard to orient at low zoom
+- Label density scales with zoom: only Major centres are named at the widest view, with Important, Medium, and all visible sites revealed progressively on zooming in
+
+### Feature 21: Shareable view links
+
+- The current map state (centre, zoom, search text, rank filters, view mode, basemap, layers, and any active radius) is now encoded in the URL
+- A share button copies a link to the exact current view to the clipboard, with a confirmation toast
+- Opening a shared link restores the full state, so a particular view can be sent to the supervisor or included in the dissertation
+
+### Feature 20: Multi-select rank filtering
+
+- Replaced the previous cumulative rank filter with independent multi-select pills, so any combination of significance levels can be shown at once
+- The site count label reflects the selected combination in natural language
 
 ## 2026-07-11
 
+### Feature 19: Performance optimisation
+
+- Switched marker rendering to a shared canvas renderer so all 5,223 sites stay responsive during fast pan and zoom
+- Rank 1 sites render in dedicated unclustered layers so their markers and labels are always present
+- Analytics recalculation is debounced on map movement to keep panning smooth
+
+### Feature 18: Mobile search drawer and bottom radius bar
+
+- Reworked the mobile layout: the map is full screen with a gold Search tab on the left edge mirroring the Details tab on the right
+- Tapping Search slides in a drawer with the search box, filters, and site list; selecting a site closes the drawer and flies the map to it
+- The proximity tool on mobile now uses a dedicated bottom radius bar with its own slider, kept in sync with the desktop control
+- Fixed points disappearing during pan and zoom on phones by switching circle markers to canvas rendering
+
 ### Feature 17: Mobile responsive layout
 
-- First mobile layout pass introducing a bottom sheet panel sized for small screens
-- Map controls and view pills repositioned to remain reachable above the sheet
-
-### Fix: mobile rendering and interaction
-
-- Switched marker rendering to canvas (Leaflet preferCanvas) so all 5,223 points stay responsive on mobile GPUs during fast pan and zoom
-- Made the sheet toggle reliable on iOS by handling touchend directly with a double toggle guard
-- Debounced analytics recalculation on map movement to keep momentum panning smooth
-
-## 2026-07-09
-
-### Match details panel and home control to the original design
-
-- Rebuilt the Details panel to the design specification: Maya Civilisation title block, introductory text, Sites by Country doughnut with the design colour palette, Top Regions bar chart, Sites by Significance bars, Best Areas to Visit cards, and a data source note
-- Sites by Significance rendered as custom HTML bars that rescale to the sites in the current view
-- Replaced the custom home button with a standard Leaflet bar control using a house glyph, positioned directly under the zoom controls
-
-### Fix: analytics scoped to the current map view (closes issue 4)
-
-- The Details panel counts and all charts now reflect only the sites inside the current viewport
-- Panning and zooming refreshes the analytics live
-
-## 2026-07-08
-
-### Fix: major site visibility and label placement (closes issues 1, 2, and 3)
-
-- Rank 1 sites are no longer clustered; they render as individual larger gold markers at every zoom level so their labels never float without a point
-- Added greedy collision aware label placement: higher significance sites win, overlapping lower rank labels are skipped
-- At zoom 10 and above the rank cutoff is removed so every visible site is labelled where space allows
+- Added the first responsive layout for narrow screens, with the floating panel becoming a bottom sheet that expands and collapses
+- View pills and map buttons reposition above the sheet, and the details panel opens full width
+- Desktop layout left unchanged
 
 ## 2026-07-06
 
