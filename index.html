@@ -31,6 +31,7 @@
       --popup-bg: #16213e;
       --map-bg: #0e1424;
       --measure: #dc7d3c;
+      --ruin: #b5651d;
     }
 
     * { box-sizing: border-box; }
@@ -377,7 +378,6 @@
     .map-icon-btn.loading svg { animation: locspin 0.9s linear infinite; }
     @keyframes locspin { to { transform: rotate(360deg); } }
 
-    /* Feature 24: measure button uses the app's gold accent when active */
     .map-icon-btn.measure-on { background: var(--gold); color: #1a1a1a; }
     .map-icon-btn.measure-on:hover { background: var(--gold-soft); }
 
@@ -443,7 +443,6 @@
       pointer-events: none;
     }
 
-    /* Feature 24: per-segment km label sitting on the midpoint of each leg */
     .measure-seg { background: transparent !important; border: none !important; }
     .measure-seg-inner {
       display: inline-block; white-space: nowrap;
@@ -487,7 +486,6 @@
     .bm-option.active .bm-name { color: #b07d2a; font-weight: 600; }
     .bm-option .bm-sub { font-size: 11px; color: var(--muted); line-height: 1.2; font-style: italic; }
 
-    /* Feature 23: divider and streams toggle inside the layers popover */
     .bm-divider { height: 1px; background: #eeeeee; margin: 5px 8px; }
 
     .user-loc-icon { background: transparent; border: none; }
@@ -533,7 +531,6 @@
     .details-tab:hover { background: var(--gold-soft); padding-right: 12px; }
     .details-tab.hidden { display: none; }
 
-    /* Search tab on the left edge, mobile only */
     .search-tab { display: none; }
 
     /* ---------- Details panel, matching the original design ---------- */
@@ -869,7 +866,7 @@
 
       <!-- Section 6 -->
       <section class="ap-section">
-        <p class="ap-note">Data source: Electronic Atlas of Ancient Maya Sites (EAAMS), compiled by Walter Witschey and Clifford Brown. Coordinates in WGS84 (EPSG:4326). Site significance ranked 1 (major centre) to 5 (minimal remains) by the original dataset compilers. Stream network from OpenStreetMap contributors and supplied survey data.</p>
+        <p class="ap-note">Data source: Electronic Atlas of Ancient Maya Sites (EAAMS), compiled by Walter Witschey and Clifford Brown. Coordinates in WGS84 (EPSG:4326). Site significance ranked 1 (major centre) to 5 (minimal remains) by the original dataset compilers. Stream network from OpenStreetMap contributors and supplied survey data. Structure footprints for the Blue Creek area from supplied archaeological survey data.</p>
       </section>
     </div>
   </aside>
@@ -977,6 +974,10 @@
       if (streams === '0') state.streams = false;
       else if (streams === '1') state.streams = true;
 
+      const structures = params.get('struct');
+      if (structures === '0') state.structures = false;
+      else if (structures === '1') state.structures = true;
+
       const rc = params.get('rc');
       const rkm = parseInt(params.get('rkm'), 10);
       if (rc && Number.isFinite(rkm)) {
@@ -1027,13 +1028,14 @@
     map.createPane('riversPane');
     map.getPane('riversPane').style.zIndex = 350;
 
+    // Feature 25: structures sit just above rivers, below site markers/labels
+    map.createPane('structuresPane');
+    map.getPane('structuresPane').style.zIndex = 360;
+
     map.createPane('labelsPane');
     map.getPane('labelsPane').style.zIndex = 640;
     map.getPane('labelsPane').classList.add('leaflet-labels-pane');
 
-    // Feature 24: the measure line sits in one pane and its distance labels
-    // in a HIGHER pane, so the labels always render on top of the line and
-    // stay readable (fixes the line covering the km pills).
     map.createPane('measureLinePane');
     map.getPane('measureLinePane').style.zIndex = 658;
     map.createPane('measurePane');
@@ -1127,6 +1129,72 @@
       scheduleHashUpdate();
     }
 
+    // ── Feature 25: structure footprints (Blue Creek area, high zoom only) ──
+    // These are excavated building outlines for a cluster of sites in northern
+    // Belize. They only make sense zoomed right in, so they appear from
+    // STRUCT_MIN_ZOOM and stay hidden at regional zoom. Polygons get a warm
+    // stone fill with a darker outline (like an archaeological site plan);
+    // line-only sites are drawn as ruins outlines in the same palette.
+    let structuresOn = (initialState.structures === undefined) ? true : initialState.structures;
+    let structureLayer = null;
+    let structuresLoaded = false;
+    let structuresLoading = false;
+
+    const STRUCT_MIN_ZOOM = 14;
+
+    function structureStyle(feature) {
+      const t = feature.properties && feature.properties.t;
+      if (t === 'line') {
+        return { color: '#8a4b12', weight: 1.1, opacity: 0.9, fill: false };
+      }
+      // polygon footprint: stone fill, darker edge
+      return { color: '#7c4a17', weight: 1, opacity: 0.95, fillColor: '#b5651d', fillOpacity: 0.35 };
+    }
+
+    function updateStructureVisibility() {
+      if (!structuresLoaded || !structuresOn) return;
+      const show = map.getZoom() >= STRUCT_MIN_ZOOM;
+      if (show) {
+        if (!map.hasLayer(structureLayer)) structureLayer.addTo(map);
+      } else if (map.hasLayer(structureLayer)) {
+        map.removeLayer(structureLayer);
+      }
+    }
+
+    function loadStructures() {
+      if (structuresLoaded || structuresLoading) return Promise.resolve();
+      structuresLoading = true;
+      return fetch('data/maya_structures.geojson')
+        .then((r) => { if (!r.ok) throw new Error('structures ' + r.status); return r.json(); })
+        .then((geo) => {
+          structureLayer = L.geoJSON(geo, {
+            pane: 'structuresPane',
+            style: structureStyle,
+            interactive: true,
+            onEachFeature: (f, layer) => {
+              const site = f.properties && f.properties.site;
+              if (site) layer.bindPopup(`<div class="popup-title" style="margin:0">${site}</div><div class="popup-sub" style="margin-top:4px">Structure footprint</div>`, { maxWidth: 220 });
+            }
+          });
+          structuresLoaded = true;
+          structuresLoading = false;
+          updateStructureVisibility();
+        })
+        .catch((e) => { structuresLoading = false; console.error('Structure layer failed to load:', e); });
+    }
+
+    function setStructures(on) {
+      structuresOn = on;
+      if (on) {
+        if (!structuresLoaded) loadStructures();
+        else updateStructureVisibility();
+      } else if (structureLayer && map.hasLayer(structureLayer)) {
+        map.removeLayer(structureLayer);
+      }
+      renderBasemapOptions();
+      scheduleHashUpdate();
+    }
+
     function renderBasemapOptions() {
       basemapPopover.innerHTML = '';
       basemapMeta.forEach(({ name, sub }) => {
@@ -1158,6 +1226,13 @@
       streamsOpt.innerHTML = `<span class="bm-check">${CHECK_SVG}</span><span class="bm-text"><span class="bm-name">Streams</span><span class="bm-sub">Small watercourses, from mid zoom</span></span>`;
       streamsOpt.addEventListener('click', () => setStreams(!streamsOn));
       basemapPopover.appendChild(streamsOpt);
+
+      const structOpt = document.createElement('button');
+      structOpt.type = 'button';
+      structOpt.className = 'bm-option' + (structuresOn ? ' active' : '');
+      structOpt.innerHTML = `<span class="bm-check">${CHECK_SVG}</span><span class="bm-text"><span class="bm-name">Structures</span><span class="bm-sub">Building outlines, Blue Creek (high zoom)</span></span>`;
+      structOpt.addEventListener('click', () => setStructures(!structuresOn));
+      basemapPopover.appendChild(structOpt);
     }
     function openBasemapPopover() { basemapPopover.classList.add("open"); layersBtn.classList.add("active"); }
     function closeBasemapPopover() { basemapPopover.classList.remove("open"); layersBtn.classList.remove("active"); }
@@ -1734,6 +1809,7 @@
       if (currentView !== 'points') params.set('view', currentView);
       if (activeBasemapName !== 'OpenStreetMap') params.set('base', activeBasemapName);
       if (!streamsOn) params.set('streams', '0');
+      if (!structuresOn) params.set('struct', '0');
       if (radiusFilter) {
         params.set('rc', radiusFilter.lat.toFixed(4) + ',' + radiusFilter.lng.toFixed(4));
         params.set('rkm', String(radiusFilter.km));
@@ -2151,7 +2227,6 @@
       return (best && best.properties && best.properties.name) ? best.properties.name : null;
     }
 
-    // Segment km labels live in the higher 'measurePane', above the line
     function makeSegLabel(a, b) {
       const mid = L.latLng((a.lat + b.lat) / 2, (a.lng + b.lng) / 2);
       const km = haversineKm(a.lat, a.lng, b.lat, b.lng);
@@ -2192,7 +2267,6 @@
       measureClosed = false;
     }
 
-    // Vertex dots sit in the higher label pane too, so they stay above the line
     function addMeasureVertex(latlng) {
       const dot = L.circleMarker(latlng, {
         radius: 5, color: '#ffffff', weight: 2,
@@ -2216,7 +2290,6 @@
       }
     }
 
-    // The connecting line is drawn in the LOWER 'measureLinePane'
     function redrawMeasureLine() {
       if (measureClosed) return;
       if (measureLine) {
@@ -2341,11 +2414,12 @@
       addMeasurePoint(map.containerPointToLatLng(pt));
     }, true);
 
-    // ── Refresh labels, analytics and streams when the view changes ───────
+    // ── Refresh labels, analytics, streams and structures on view change ──
     let analyticsTimer = null;
     function onViewChanged() {
       refreshLabels();
       updateStreamVisibility();
+      updateStructureVisibility();
       if (analyticsTimer) clearTimeout(analyticsTimer);
       analyticsTimer = setTimeout(updateAnalytics, 150);
       scheduleHashUpdate();
@@ -2378,6 +2452,7 @@
         applyFilters();
 
         if (streamsOn) loadStreams();
+        if (structuresOn) loadStructures();
 
         if (initialState.radius) {
           rcSlider.value = String(initialState.radius.km);
