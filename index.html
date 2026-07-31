@@ -177,6 +177,35 @@
     .radius-btn:hover { background: var(--chip-bg-hover); }
     .radius-btn.active { background: var(--gold); color: #1a1a1a; }
 
+    /* Feature 26: "sites with maps" filter checkbox under the search bar */
+    .data-filter-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 2px 4px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .data-filter-row input {
+      appearance: none; -webkit-appearance: none;
+      width: 16px; height: 16px; flex: 0 0 16px;
+      border: 1.5px solid #c9ccd1; border-radius: 4px;
+      background: #fff; cursor: pointer; position: relative;
+      transition: background 0.14s ease, border-color 0.14s ease;
+    }
+    .data-filter-row input:checked {
+      background: var(--gold); border-color: var(--gold);
+    }
+    .data-filter-row input:checked::after {
+      content: ""; position: absolute;
+      left: 4.5px; top: 1.5px; width: 4px; height: 8px;
+      border: solid #1a1a1a; border-width: 0 2px 2px 0;
+      transform: rotate(45deg);
+    }
+    .data-filter-row label {
+      font-size: 12px; color: var(--text); cursor: pointer;
+      display: flex; align-items: center; gap: 5px;
+    }
+    .data-filter-row .df-icon { width: 13px; height: 13px; color: var(--ruin); flex: 0 0 13px; }
+
     .radius-control {
       display: none; flex-direction: column; gap: 8px;
       background: var(--chip-bg); border-radius: 12px; padding: 12px;
@@ -235,7 +264,9 @@
     .site-item:hover { background: var(--chip-bg); }
     .site-item.active { background: var(--gold); color: var(--text); }
     .site-item.active .site-meta { color: rgba(26, 26, 26, 0.72); }
-    .site-name { font-size: 13px; font-weight: 500; color: var(--text); line-height: 1.25; }
+    .site-name { font-size: 13px; font-weight: 500; color: var(--text); line-height: 1.25; display: flex; align-items: center; gap: 5px; }
+    .site-name .map-badge { width: 12px; height: 12px; color: var(--ruin); flex: 0 0 12px; }
+    .site-item.active .site-name .map-badge { color: #7c4a17; }
     .site-meta { font-size: 11px; color: var(--muted); line-height: 1.2; }
     .empty {
       padding: 16px 12px; color: var(--muted);
@@ -340,6 +371,16 @@
       letter-spacing: 0.4px; text-transform: uppercase;
     }
     .popup-rank .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--gold); }
+    .popup-data-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      margin-top: 8px;
+      background: rgba(181, 101, 29, 0.2);
+      color: #e6b877; border-radius: 999px;
+      padding: 3px 10px;
+      font-size: 11px; font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+    .popup-data-badge svg { width: 12px; height: 12px; }
 
     .marker-cluster-small,
     .marker-cluster-medium,
@@ -775,6 +816,18 @@
       <button class="radius-btn" id="radiusBtn" type="button">Radius</button>
     </div>
 
+    <div class="data-filter-row" id="dataFilterRow">
+      <input type="checkbox" id="dataFilterCheck" aria-label="Show only sites with detailed maps">
+      <label for="dataFilterCheck">
+        <svg class="df-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon>
+          <line x1="8" y1="2" x2="8" y2="18"></line>
+          <line x1="16" y1="6" x2="16" y2="22"></line>
+        </svg>
+        Show only sites with maps
+      </label>
+    </div>
+
     <div class="count-label" id="countLabel">Loading sites...</div>
 
     <div class="rank-filter" id="rankFilter" role="group" aria-label="Filter by significance">
@@ -942,6 +995,11 @@
   <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 
   <script>
+    // Feature 26: the set of sites for which detailed structure data exists,
+    // matched by location to the supplied Blue Creek survey data.
+    const SITES_WITH_DATA = new Set(["Bed Rock", "Blue Creek", "Chum Balam-Nal", "Grey Fox", "Nojol Nah"]);
+    const MAP_BADGE_SVG = '<svg class="map-badge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg>';
+
     // ── Feature 21: shareable view state in the URL ───────────────────────
     function parseHashState() {
       const raw = window.location.hash.replace(/^#\/?/, '');
@@ -977,6 +1035,9 @@
       const structures = params.get('struct');
       if (structures === '0') state.structures = false;
       else if (structures === '1') state.structures = true;
+
+      const withData = params.get('data');
+      if (withData === '1') state.withData = true;
 
       const rc = params.get('rc');
       const rkm = parseInt(params.get('rkm'), 10);
@@ -1028,7 +1089,6 @@
     map.createPane('riversPane');
     map.getPane('riversPane').style.zIndex = 350;
 
-    // Feature 25: structures sit just above rivers, below site markers/labels
     map.createPane('structuresPane');
     map.getPane('structuresPane').style.zIndex = 360;
 
@@ -1129,12 +1189,7 @@
       scheduleHashUpdate();
     }
 
-    // ── Feature 25: structure footprints (Blue Creek area, high zoom only) ──
-    // These are excavated building outlines for a cluster of sites in northern
-    // Belize. They only make sense zoomed right in, so they appear from
-    // STRUCT_MIN_ZOOM and stay hidden at regional zoom. Polygons get a warm
-    // stone fill with a darker outline (like an archaeological site plan);
-    // line-only sites are drawn as ruins outlines in the same palette.
+    // ── Feature 25: structure footprints ──────────────────────────────────
     let structuresOn = (initialState.structures === undefined) ? true : initialState.structures;
     let structureLayer = null;
     let structuresLoaded = false;
@@ -1147,7 +1202,6 @@
       if (t === 'line') {
         return { color: '#8a4b12', weight: 1.1, opacity: 0.9, fill: false };
       }
-      // polygon footprint: stone fill, darker edge
       return { color: '#7c4a17', weight: 1, opacity: 0.95, fillColor: '#b5651d', fillOpacity: 0.35 };
     }
 
@@ -1288,7 +1342,11 @@
         ? `<div class="popup-sub">${subParts.join('<span class="sep">·</span>')}</div>` : '';
       const rankBadge = rankLabel
         ? `<div class="popup-rank"><span class="dot"></span>${rankLabel}</div>` : '';
-      return `<div class="popup-title">${name}</div>${subLine}${rankBadge}`;
+      const hasData = SITES_WITH_DATA.has(name);
+      const dataBadge = hasData
+        ? `<div class="popup-data-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg>Detailed site map available</div>`
+        : '';
+      return `<div class="popup-title">${name}</div>${subLine}${rankBadge}${dataBadge}`;
     }
 
     // ── Site state ────────────────────────────────────────────────────────
@@ -1302,6 +1360,7 @@
     let radiusFilter = null;
     let radiusCircle = null;
     let measureActive = false;
+    let withDataOnly = initialState.withData || false;
 
     const pointMarkerByIdx = new Map();
     const bubbleMarkerByIdx = new Map();
@@ -1486,6 +1545,7 @@
       if (!matchesQuery(feature, searchQuery)) return false;
       const rank = feature.properties && feature.properties.rank;
       if (activeRanks.size > 0 && !activeRanks.has(rank)) return false;
+      if (withDataOnly && !SITES_WITH_DATA.has(feature.properties && feature.properties.name)) return false;
       if (radiusFilter) {
         const [lng, lat] = feature.geometry.coordinates;
         if (haversineKm(radiusFilter.lat, radiusFilter.lng, lat, lng) > radiusFilter.km) return false;
@@ -1579,6 +1639,10 @@
       const el = document.getElementById('countLabel');
       const noun = `site${n === 1 ? '' : 's'}`;
 
+      if (withDataOnly) {
+        el.textContent = `${fmt} ${noun} with detailed maps`;
+        return;
+      }
       if (radiusFilter) {
         el.textContent = `${fmt} ${noun} within ${radiusFilter.km} km`;
         return;
@@ -1605,9 +1669,9 @@
       if (currentFiltered.length === 0) {
         const empty = document.createElement('li');
         empty.className = 'empty';
-        empty.textContent = radiusFilter
-          ? 'No sites within this radius.'
-          : 'No sites match your filters.';
+        empty.textContent = withDataOnly
+          ? 'No sites with detailed maps match.'
+          : (radiusFilter ? 'No sites within this radius.' : 'No sites match your filters.');
         listEl.appendChild(empty);
         return;
       }
@@ -1619,8 +1683,9 @@
         const country = p.country || '';
         const state = p.state || '';
         const meta = [country, state].filter(Boolean).join(' · ');
+        const badge = SITES_WITH_DATA.has(p.name) ? MAP_BADGE_SVG : '';
         item.innerHTML = `
-          <span class="site-name">${p.name || 'Unnamed site'}</span>
+          <span class="site-name">${p.name || 'Unnamed site'}${badge}</span>
           <span class="site-meta">${meta}</span>
         `;
         item.addEventListener('click', () => setActiveByIdx(feature._idx));
@@ -1665,6 +1730,14 @@
     searchEl.value = initialState.q || '';
     searchEl.addEventListener('input', () => {
       searchQuery = searchEl.value.trim().toLowerCase();
+      applyFilters();
+    });
+
+    // Feature 26: the sites-with-maps filter checkbox
+    const dataFilterCheck = document.getElementById('dataFilterCheck');
+    dataFilterCheck.checked = withDataOnly;
+    dataFilterCheck.addEventListener('change', () => {
+      withDataOnly = dataFilterCheck.checked;
       applyFilters();
     });
 
@@ -1810,6 +1883,7 @@
       if (activeBasemapName !== 'OpenStreetMap') params.set('base', activeBasemapName);
       if (!streamsOn) params.set('streams', '0');
       if (!structuresOn) params.set('struct', '0');
+      if (withDataOnly) params.set('data', '1');
       if (radiusFilter) {
         params.set('rc', radiusFilter.lat.toFixed(4) + ',' + radiusFilter.lng.toFixed(4));
         params.set('rkm', String(radiusFilter.km));
@@ -1894,7 +1968,7 @@
     }
     function onDragStart(e) {
       if (isMobile()) return;
-      if (e.target.closest('button, input, a')) return;
+      if (e.target.closest('button, input, a, label')) return;
       const rect = panel.getBoundingClientRect();
       const point = getEventPoint(e);
       drag = { offsetX: point.x - rect.left, offsetY: point.y - rect.top };
